@@ -16,7 +16,9 @@ setup(
     # Couldn't get numpy install to work without
     # an out-of-band: sudo apt-get install python-dev
     setup_requires   = [],
-    install_requires = ['lxml>=4.2.5'
+    install_requires = ['lxml>=4.2.5',
+                        #'pymysql_utils>=1.11',
+                        'nltk>=3.4',
                         ],
 
     #dependency_links = ['https://github.com/DmitryUlyanov/Multicore-TSNE/tarball/master#egg=package-1.0']
