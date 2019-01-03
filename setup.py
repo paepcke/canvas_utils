@@ -17,7 +17,7 @@ setup(
     # an out-of-band: sudo apt-get install python-dev
     setup_requires   = [],
     install_requires = ['lxml>=4.2.5',
-                        #'pymysql_utils>=1.11',
+                        'pymysql_utils>=2.0.5',
                         'nltk>=3.4',
                         ],
 

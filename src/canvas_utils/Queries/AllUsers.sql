@@ -1,0 +1,33 @@
+DROP TABLE IF EXISTS AllUsers;
+CREATE TABLE AllUsers (
+    user_id bigint,
+    name varchar(255),
+    type varchar(30),
+    role varchar(30),
+    workflow_state varchar(20)
+    ) engine=MyISAM;
+
+INSERT INTO AllUsers
+  SELECT user_id,
+         NULL AS name,
+         type,
+         case 
+            when type = 'TeacherEnrollment'  THEN 'instructor'
+            when type = 'StudentEnrollment'  THEN 'student'
+            when type = 'TaEnrollment'       THEN 'TA'
+            when type = 'DesignerEnrollment' THEN 'designer'
+            when type = 'StudentEnrollment'  THEN 'student'
+            when type = 'ObserverEnrollment' THEN 'observer'
+         END,
+         workflow_state
+    FROM <canvas_db>.enrollment_dim;
+
+# Add role (TeacherEnrollment, StudentEnrollment, etc.):
+
+CREATE INDEX usr_id_idx ON AllUsers(user_id);
+
+# 50sec:
+UPDATE AllUsers
+  LEFT JOIN <canvas_db>.user_dim
+    ON user_id = id
+  SET AllUsers.name = user_dim.name;
