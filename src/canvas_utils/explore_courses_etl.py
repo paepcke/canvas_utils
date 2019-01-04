@@ -45,7 +45,11 @@ class ECXMLExtractor(object):
 
     def __init__(self, xml_file):
         '''
-        Constructor
+        The input XML file of Explore Courses information 
+        is read, and spit back out as csv.
+        
+        @param xml_file: file name or file object
+        @type xml_file: {str | file-like}
         '''
         sys.stderr.write('Building xml tree in memory...\n')
         self.root = etree.parse(xml_file)
@@ -152,7 +156,7 @@ class ECXMLExtractor(object):
 
             if len(quarter_names) == 0:
                 quarter_names = '""'                    
-            db_tuple.append(quarter_name)
+            db_tuple.append(quarter_names)
             
             instructors_list = []
             instructors_els =  course_el.xpath('sections/section/schedules/schedule/instructors/instructor')

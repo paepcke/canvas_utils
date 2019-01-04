@@ -110,6 +110,7 @@ DELETE FROM Courses
     and quarter_name_peoplesoft != substring_index(quarter_name_canvas, ' ',1);
 
 CREATE INDEX crs_nm_idx ON Courses(course_name(50));
+CREATE INDEX crs_id_idx ON Courses(course_id);
 
 # Add term name:
 

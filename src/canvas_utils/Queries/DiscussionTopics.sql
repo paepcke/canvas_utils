@@ -67,7 +67,6 @@ UPDATE DiscussionTopics
 # Add the catalog course name: AA110, etc.
 
 CREATE INDEX crs_id_idx ON DiscussionTopics(disc_topic_course_id);
-CREATE INDEX crs_id_idx ON Courses(course_id);
 
 UPDATE DiscussionTopics
   LEFT JOIN Courses

@@ -4,9 +4,14 @@ Created on Jan 2, 2019
 
 @author: Andreas Paepcke
 '''
-import os
-import requests
+from contextlib import contextmanager
 import logging
+import os
+import sys
+
+import requests
+from explore_courses_etl import ECXMLExtractor
+
 
 class ECPuller(object):
     '''
@@ -68,17 +73,14 @@ class ECPuller(object):
         @param logger: a Python logger to use for progress reporting.
         @type logger: logging.Logger
         '''
-        if os.path.isabs(outfile):
-            # Ensure that the outfile directory exists:
-            out_dir = os.path.dirname(outfile)
-            
-            # Ensure the directory exists:
-            os.makedirs(out_dir, mode=0o644, exist_ok=True)
-
-        else:
+        if not os.path.isabs(outfile):
             # Relative path: take this script's dir as the root:
             curr_dir = os.path.dirname(__file__)
             outfile = os.path.join(curr_dir, outfile)
+            
+        # Ensure that the outfile directory exists:
+        out_dir = os.path.dirname(outfile)
+        os.makedirs(out_dir, mode=0o755, exist_ok=True)
         
         if os.path.exists(outfile) and not overwrite_existing:
             raise RuntimeError("File %s already exists, and overwrite_existing is False." % outfile)
@@ -92,15 +94,19 @@ class ECPuller(object):
         else:
             logger = None
         
-        _bytes_pulled_counted = self.pull_ec(outfile, logger)
-        # For subsequent interrogation of result:
         self.outfile = outfile
+        self.logger  = logger
+        
+        # Ready for caller to invoke pull_ec(outfile, logger) for
+        # pulling a new xml file, or ec_xml_to_csv(xml_file, outfile)
+        # to turn an already pulled xml file into CSV 
+        
         
     #-------------------------
     # pull_ec 
     #--------------
 
-    def pull_ec(self, outfile, logger):
+    def pull_ec(self, outfile=None, logger=None):
         '''
         Contact server, and pull data in chunks. Outfile
         may be relative the the directory of this script,
@@ -114,6 +120,11 @@ class ECPuller(object):
         @return: number of kbytes pulled
         @rtype: float
         '''
+        if outfile is None:
+            outfile = self.outfile
+        if logger is None:
+            logger = self.logger
+        
         # Number KB after which to report progress, if
         # a logger is available. Here: every 20MB:
         if logger is not None:
@@ -172,7 +183,20 @@ class ECPuller(object):
             return "{}KB".format(round(byte_size / kb, 1))
         else:
             return "{} bytes".format(byte_size)
-            
+
+    #-------------------------
+    # ec_xml_to_csv 
+    #--------------
+    
+    def ec_xml_to_csv(self, xml_infile, csv_outfile=None):
+
+        with open(xml_infile, 'r') as fd:
+            if csv_outfile is not None:
+                with open(csv_outfile, 'w') as file_out_fd:
+                    with stdout_redirected(file_out_fd):
+                        ECXMLExtractor(fd)
+            else:
+                ECXMLExtractor(fd)
     
     #-------------------------
     # setup_logging 
@@ -206,9 +230,27 @@ class ECPuller(object):
         # Add the handler to the logger
         self.logger.addHandler(handler)
         self.logger.setLevel(loggingLevel)
+    
+# ---------------------------------- Support Functions -------------------    
+    
+#-------------------------
+# stdout_redirection 
+#--------------
+
+@contextmanager
+def stdout_redirected(new_stdout):
+    save_stdout = sys.stdout
+    sys.stdout = new_stdout
+    try:
+        yield None
+    finally:
+        sys.stdout = save_stdout
         
+# ---------------------------------- Main -------------------            
         
 if __name__ == '__main__':
     
     ec_puller = ECPuller('/tmp/ec.xml', log_level='info', overwrite_existing=True)
-    print("EC size: {}".format(ec_puller.bytes_pulled(human_readable=True)))   
+    #****ec_puller.pull_ec()
+    ec_puller.ec_xml_to_csv('/tmp/ec.xml', '/tmp/ec.csv')
+    #print("EC size: {}".format(ec_puller.bytes_pulled(human_readable=True)))   

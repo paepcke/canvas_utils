@@ -107,8 +107,6 @@ UPDATE CourseAssignments
 
 # Fill in the term_name:
 
-CREATE INDEX crs_id_idx ON Courses(course_id);
-
 UPDATE CourseAssignments
   LEFT JOIN Courses
     USING(course_id)

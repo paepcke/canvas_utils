@@ -5,12 +5,19 @@ Created on Jan 1, 2019
 '''
 
 import getpass
-import os
-import pwd
 import logging
-    
+import os
+import pickle
+import pwd
+import sys
+
 from pymysql_utils.pymysql_utils import MySQLDB
-from .pull_explore_courses import ECPuller
+from pull_explore_courses import ECPuller
+
+# Enable import from sibling modules in this
+# same package (insane that this is complicated!):
+sys.path.insert(0, os.path.dirname(__file__))
+
 
 
 class CanvasPrep(object):
@@ -32,23 +39,32 @@ class CanvasPrep(object):
     # Name of MySQL db (schema) where new,
     # auxiliary tables will be placed:
     canvas_db_aux = 'canvasdata_aux'
+
+    # Pickle file name of dict with existing
+    # tables. Used when only missing or incomplete
+    # tables are to be created:
+    healthy_tables_dict_file = 'healthy_tables_dict_file.pickle'
+    
+    # File to which Explore Courses .xml files are written:
+    ec_xml_file = 'Data/explore_courses.xml'
+     
     
     tables = [
                 'Terms',
                 'Accounts',
                 'AllUsers',
                 'AssignmentSubmissions',
+                'ExploreCourses',
                 'CourseAssignments',
-                'CourseEnrollment',
+                'Instructors',
                 'CourseInstructor',
                 'CourseInstructorTeams',
+                'CourseEnrollment',
                 'Courses',
                 'DiscussionMessages',
                 'DiscussionTopics',
-                'ExploreCourses',
                 'Graders',
                 'GradingProcess',
-                'Instructors',
                 'QuizDim',
                 'RequirementsFill',
                 'StudentUnits',
@@ -64,7 +80,13 @@ class CanvasPrep(object):
     # Constructor 
     #--------------
 
-    def __init__(self, user=None, pwd=None, db=None, host='localhost', logging_level=logging.INFO):
+    def __init__(self, 
+                 user=None, 
+                 pwd=None, 
+                 db=None, 
+                 host='localhost',
+                 create_all=True, 
+                 logging_level=logging.INFO):
         '''
         Constructor
         '''
@@ -76,6 +98,10 @@ class CanvasPrep(object):
             pwd = self.get_db_pwd()
             
         self.setup_logging()
+        
+        # Number of tables that exist; only some of those
+        # might need to be (re)created:
+        num_tables = len(CanvasPrep.tables)
             
         # Create list of full paths to table
         # creation sql files:
@@ -102,23 +128,92 @@ class CanvasPrep(object):
         # creation file to methods in this class that know how
         # to handle the necessary computations:
         
-        self.special_tables = {
-            'ExploreCourses': self.pull_explore_courses,
-            'QuizDim'       : self.create_quiz_dim
-            }
+        # Used to have tables whose .sql was not self-contained;
+        # it needed non-sql activity before or after. We took
+        # care of these, but keep this mechanism for special
+        # treatment in create_tables() in place for possible
+        # use:
+        self.special_tables = {}
         
         self.prep_db()
-        self.pull_ec()
-        self.create_tables()
+        
+        num_tables_to_do = num_tables 
+        if create_all:
+            completed_tables_dict = None
+        else:
+            # Is there an existing dict of healthy tables?
+            if os.path.exists(CanvasPrep.healthy_tables_dict_file):
+                with open(CanvasPrep.healthy_tables_dict_file, 'rb') as fd:
+                    completed_tables_dict = pickle.load(fd)
+                num_tables_to_do = len(CanvasPrep.tables) - len(completed_tables_dict)
+            else:
+                completed_tables_dict = None
+        
+        # Get a fresh copy of the Explore Courses .xml file:
+        if completed_tables_dict is None or completed_tables_dict.get('ExploreCourses', None) is None:
+            # We are supposed to refresh the ExploreCourses table.
+            # Get pull a fresh .xml file, and conver it to .csv:
+            self.pull_explore_courses()
+            
+        # Create the tables that are needed. The method will update
+        # completed_tables_dict as it succeeds building tables. So,
+        # even if an error is eventually encountered, the dict
+        # will be updates, since Python passes pointers. Also,
+        # create_tables() saves the dict to disk:
+        try:
+            self.create_tables(completed_tables=completed_tables_dict)
+        finally:
+            # For good measure: save the dict of done tables,
+            # even though create_tables() also saves:
+            self.save_table_done_dict(completed_tables_dict)
+            
+        if num_tables_to_do < num_tables:
+            not_done = num_tables - num_tables_to_do
+            self.log_info("(Re)created %s tables. Already existing: %s. Done" %\
+                          (num_tables_to_do, not_done))
+        else:
+            self.log_info("Created all %s tables. Done." % num_tables)
         
     #-------------------------
     #  create_tables
     #--------------
         
-    def create_tables(self):
+    def create_tables(self, completed_tables=None):
+        '''
+        Runs through the tl_creation_paths list of table
+        creation .sql files, and executes each. 
         
+        The completed_tables parameter is a dict mapping
+        table names to True. Presence in this dict indicates
+        that the respective table is present and complete
+        in the database from some earlier run.  
+        
+        If completed_tables is None, we will create
+        the dict, and populate it with all tables that
+        we succeed to build. If not None, we only try to 
+        create tables that are not already done, and
+        we add those to the dict.
+        
+        @param completed_tables: dictionary of completed tables
+        @type completed_tables: {str : bool}
+        @return: a new, or augmented table completion dict
+        @rtype: {str : bool}
+        '''
+        
+        if completed_tables is None:
+            do_all = True
+            completed_tables = {}
+        else:
+            do_all = False
+          
         for tbl_file_path in CanvasPrep.tbl_creation_paths:
             tbl_nm = self.tbl_nm_from_file(tbl_file_path)
+            
+            # Do we need to create this table?
+            if not do_all and completed_tables.get(tbl_nm, None) is not None:
+                # Nope, got that one already
+                continue
+                
             special_handler = self.special_tables.get(tbl_nm, None)
             if special_handler is not None:
                 self.handle_complicated_case(tbl_file_path, tbl_nm)
@@ -131,6 +226,8 @@ class CanvasPrep(object):
             # db name of the Canvas product db:
             query = query.replace('<canvas_db>', CanvasPrep.canvas_db_nm)
             query = query.replace('<canvas_aux>', CanvasPrep.canvas_db_aux)
+            query = query.replace('<data_dir>', os.path.join(os.path.dirname(__file__), 'Data'))
+            
             
             self.log_info('Working on table %s...' % tbl_nm)
             (errors, _warns) = self.db.execute(query, doCommit=False)
@@ -138,26 +235,40 @@ class CanvasPrep(object):
                 raise RuntimeError("Could not create table %s: %s" %\
                                    (tbl_nm, str(errors))
                                    )
+            completed_tables[tbl_nm] = True
+            # Save dict of done tables to disc:
+            self.save_table_done_dict(completed_tables)
             self.log_info('Done working on table %s' % tbl_nm)
-        
-    #-------------------------
-    # pull_ec 
-    #--------------
-        
-    def pull_ec(self):
-        _puller = ECPuller('Data/ec.xml',
-                           overwrite_existing=True,
-                           log_level=logging.INFO,
-                           logger=self.logger)
-        
+        return completed_tables
         
     #-------------------------
     # pull_explore_courses 
     #--------------
         
     def pull_explore_courses(self):
+        
+        puller = ECPuller(CanvasPrep.ec_xml_file,
+                          overwrite_existing=True,
+                          log_level=self.logger.level,
+                          logger=self.logger
+                          )
+        # Do the retrieval of a new .xml file from
+        # the HTTP server:
+        puller.pull_ec()
+        
+        # Convert the .xml to .csv:
+        (xml_file_root, _ext) = os.path.splitext(CanvasPrep.ec_xml_file)
+        csv_outfile = xml_file_root + '.csv'
+        puller.ec_xml_to_csv(CanvasPrep.ec_xml_file, csv_outfile)
+        
+    #-------------------------
+    # handle_complicated_case 
+    #--------------
+
+    def handle_complicated_case(self, tbl_file_path, tbl_nm):
+        # No unusual cases to handle:
         pass
-    
+
     #-------------------------
     # create_quiz_dim 
     #--------------
@@ -235,6 +346,16 @@ class CanvasPrep(object):
         if errors is not None:
             raise RuntimeError("Could not load MySQL funcs/procedures: %s" % str(errors))
         
+
+    #-------------------------
+    # save_table_done_dict 
+    #--------------
+    
+    def save_table_done_dict(self, completed_tables_dict):
+
+        with open(CanvasPrep.healthy_tables_dict_file, 'wb') as fd:                
+                        pickle.dump(completed_tables_dict, fd)        
+    
     #-------------------------
     # tbl_nm_from_file 
     #--------------
@@ -316,4 +437,4 @@ class CanvasPrep(object):
 
 if __name__ == '__main__':
     
-    CanvasPrep()
+    CanvasPrep(create_all = False)

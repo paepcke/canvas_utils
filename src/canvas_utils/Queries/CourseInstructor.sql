@@ -36,6 +36,7 @@ UPDATE CourseInstructor
     ON CourseInstructor.course_id = <canvas_db>.course_dim.id
   SET CourseInstructor.course_name = <canvas_db>.course_dim.name;
 
+CREATE INDEX enrl_trm_id_idx ON CourseInstructor(enrollment_term_id);
 
 # Fill in the enrollment term name 4min 16sec
 UPDATE CourseInstructor
