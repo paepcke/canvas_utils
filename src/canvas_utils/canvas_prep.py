@@ -5,22 +5,23 @@ Created on Jan 1, 2019
 @author: Andreas Paepcke
 '''
 
+import argparse
 import getpass
 import logging
+from os import getenv
 import os
 import pickle
 import pwd
 import sys
 
 from pymysql_utils.pymysql_utils import MySQLDB
+
 from pull_explore_courses import ECPuller
+
 
 # Enable import from sibling modules in this
 # same package (insane that this is complicated!):
-sys.path.insert(0, os.path.dirname(__file__))
-
-
-
+#sys.path.insert(0, os.path.dirname(__file__))
 class CanvasPrep(object):
     '''
     Draws on continuously changing data from Canvas.
@@ -35,7 +36,7 @@ class CanvasPrep(object):
     canvas_db_nm = 'canvasdata_prd'
     
     # Canvas pwd file name:
-    canvas_pwd_file = 'canvas_pwd' 
+    canvas_pwd_file = os.path.join(getenv("HOME"), '.ssh', 'canvas_pwd') 
     
     # Name of MySQL db (schema) where new,
     # auxiliary tables will be placed:
@@ -86,7 +87,7 @@ class CanvasPrep(object):
                  pwd=None, 
                  db=None, 
                  host='localhost',
-                 create_all=True, 
+                 create_all=False, 
                  logging_level=logging.INFO):
         '''
         Constructor
@@ -98,7 +99,14 @@ class CanvasPrep(object):
         if pwd is None:
             pwd = self.get_db_pwd()
             
+        if db is None:
+            db = CanvasPrep.canvas_db_aux
+
         self.setup_logging()
+        self.logger.setLevel(logging_level)
+        
+        if self.create_all:
+            self.log_info("NOTE: only creating tables not already in {}. Use --all to replace all.".format(db))
         
         # Number of tables that exist; only some of those
         # might need to be (re)created:
@@ -440,4 +448,43 @@ class CanvasPrep(object):
 
 if __name__ == '__main__':
     
-    CanvasPrep(create_all = False)
+    parser = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),
+                                     formatter_class=argparse.RawTextHelpFormatter,
+                                     description="Create auxiliary canvas tables."
+                                     )
+
+    parser.add_argument('-u', '--user',
+                        help='user name for logging into the canvas database. Default: {}'.format(CanvasPrep.default_user),
+                        default=CanvasPrep.default_user)
+                        
+    parser.add_argument('-p', '--password',
+                        help='password for logging into the canvas database. Default: content of $HOME/.ssh/canvas_db',
+                        default=None)
+                        
+    parser.add_argument('-t', '--host',
+                        help='host name or ip of database. Default: canvasdata-prd-db1.ci6ilhrc8rxe.us-west-1.rds.amazonaws.com',
+                        default='canvasdata-prd-db1.ci6ilhrc8rxe.us-west-1.rds.amazonaws.com')
+                        
+    parser.add_argument('-d', '--database',
+                        help='MySQL/Aurora database (schema) into which new tables are to be placed. Default: canvasdata_aux',
+                        default='canvasdata_aux')
+    
+    parser.add_argument('-a', '--all',
+                        help='if present, already existing tables are retained; others are added. Else all tables refreshed. Default: False',
+                        action='store_false');
+                        
+    parser.add_argument('-q', '--quiet',
+                        help='if present, only error conditions are shown on screen. Default: False',
+                        action='store_false');
+                        
+
+    args = parser.parse_args();
+    
+    
+    CanvasPrep(user=args.user,
+               pwd=args.pwd,
+               host=args.host,
+               db=args.database,
+               create_all=args.all,
+               logging_level=logging.ERROR if args.quiet else logging.INFO  
+               )
