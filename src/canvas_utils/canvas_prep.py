@@ -282,9 +282,9 @@ class CanvasPrep(object):
         puller.pull_ec()
                 
         # Convert the .xml to .csv:
-        (xml_file_root, _ext) = os.path.splitext(CanvasPrep.ec_xml_file)
+        (xml_file_root, _ext) = os.path.splitext(ec_xml_file)
         csv_outfile = xml_file_root + '.csv'
-        puller.ec_xml_to_csv(CanvasPrep.ec_xml_file, csv_outfile)
+        puller.ec_xml_to_csv(ec_xml_path, csv_outfile)
         
     #-------------------------
     # handle_complicated_case 
