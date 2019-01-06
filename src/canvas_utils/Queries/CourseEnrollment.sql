@@ -13,6 +13,9 @@ CREATE TABLE CourseEnrollment (
     instructor_team text
     ) engine=MyISAM;
 
+# <end_creation>
+
+
 INSERT INTO CourseEnrollment
 SELECT CrseEnrl.*, NULL AS instructor_team
  FROM (SELECT <canvas_db>.course_dim.id AS course_id,

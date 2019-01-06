@@ -4,6 +4,9 @@ CREATE TABLE Terms (
     term_name varchar(60),
     start_date timestamp
     );
+
+# <end_creation>
+
 INSERT INTO Terms
 SELECT DISTINCT id, name, date_start
   FROM <canvas_db>.enrollment_term_dim;

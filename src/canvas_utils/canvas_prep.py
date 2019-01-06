@@ -1,7 +1,8 @@
+#!/usr/bin/env python
 '''
 Created on Jan 1, 2019
 
-@author: paepcke
+@author: Andreas Paepcke
 '''
 
 import getpass
@@ -222,6 +223,8 @@ class CanvasPrep(object):
             with open(tbl_file_path, 'r') as fd:
                 query = fd.read().strip()
                 
+            # The following replacements should be done using 
+            # the newer finalize_table module.
             # Replace the placeholder <canvas_db> with the
             # db name of the Canvas product db:
             query = query.replace('<canvas_db>', CanvasPrep.canvas_db_nm)

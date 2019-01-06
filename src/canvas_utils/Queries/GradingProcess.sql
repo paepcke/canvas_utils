@@ -16,6 +16,8 @@ CREATE TABLE GradingProcess (
     group_assignment_weight double,
     points_possible double
     ) engine=MyISAM;
+
+# <end_creation>
     
 CREATE INDEX account_id_idx ON CourseAssignments(account_id, course_id);
 # 1min 15sec:

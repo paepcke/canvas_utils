@@ -4,6 +4,8 @@ CREATE TABLE Graders (
     grader_name varchar(255)
     ) engine=MyISAM;
 
+# <end_creation>
+
 INSERT INTO Graders
 SELECT distinct user_id, user_dim.name AS grader_name
   FROM (SELECT user_id, name

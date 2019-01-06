@@ -17,6 +17,9 @@ CREATE TABLE DiscussionTopics (
     disc_topic_type varchar(20)
     ) ENGINE = MyISAM;
 
+# <end_creation>
+
+
 INSERT INTO DiscussionTopics
     SELECT
            <canvas_db>.discussion_topic_dim.id AS disc_topic_id,

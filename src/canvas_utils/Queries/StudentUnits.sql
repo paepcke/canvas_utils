@@ -13,6 +13,8 @@ CREATE TABLE StudentUnits (
     enrollment int
     ) engine=MyISAM;
 
+# <end_creation>
+
 # Fill in account_id, account_name, course_id,
 # course_name, and enrollment:
 

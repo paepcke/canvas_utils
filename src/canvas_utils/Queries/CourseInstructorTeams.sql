@@ -7,6 +7,9 @@ CREATE TABLE CourseInstructorTeams (
     instructor_team text
     ) engine=MyISAM;
   
+# <end_creation>
+
+
 INSERT INTO CourseInstructorTeams
 SELECT course_id,
        enrollment_term_id,

@@ -7,6 +7,8 @@ CREATE TABLE AllUsers (
     workflow_state varchar(20)
     ) engine=MyISAM;
 
+# <end_creation>
+
 INSERT INTO AllUsers
   SELECT user_id,
          NULL AS name,

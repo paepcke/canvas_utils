@@ -40,6 +40,8 @@ CREATE TABLE RequirementsFill (
     Writing_SLE tinyint
     ) engine=MyISAM;
 
+# <end_creation>
+
 INSERT INTO RequirementsFill
 SELECT course_name,
        course_id,

@@ -4,6 +4,9 @@ CREATE TABLE Students (
     student_name varchar(255)
     ) engine=MyISAM;
 
+# <end_creation>
+
+
 INSERT INTO Students
 SELECT distinct user_id, user_dim.name AS student_name
   FROM (SELECT user_id, name

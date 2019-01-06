@@ -19,6 +19,9 @@ CREATE TABLE CourseAssignments (
     group_assignment_final_score double
     ) engine=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+# <end_creation>
+
+
 INSERT INTO CourseAssignments
 SELECT
     NULL AS account_id,                    # <canvas_db>.assignment_group_score_fact.account_id,

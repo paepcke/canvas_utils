@@ -15,6 +15,9 @@ CREATE TABLE ExploreCourses (
     instructors varchar(255)      # 'Jane Doe', 'Jane Doe, Ken Franklin'
     ) engine=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+# <end_creation>
+
+
 # Pick up the Explore Courses parse of the EC .xml file we did
 # ahead of loading this file:
 

@@ -105,3 +105,4 @@ venv.bak/
 .project
 .pydevproject
 src/canvas_utils/Data/
+src/canvas_utils/Queries/Save/

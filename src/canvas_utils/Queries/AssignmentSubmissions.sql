@@ -22,6 +22,8 @@ CREATE TABLE AssignmentSubmissions (
     excused char(36)
     ) engine=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+# <end_creation>
+
 
 USE <canvas_db>;
 CALL createIndexIfNotExists('assIdIndx',

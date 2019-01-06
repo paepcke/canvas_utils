@@ -23,6 +23,9 @@ CREATE TABLE Courses (
     enrollment int
     ) engine=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     
+# <end_creation>
+
+
 INSERT INTO Courses
 SELECT account_id,
        course_dim.id AS course_id,

@@ -8,6 +8,8 @@ CREATE TABLE CourseInstructor (
     enrollment_term_name varchar(50)
     ) ENGINE=MyISAM;
 
+# <end_creation>
+
 INSERT INTO CourseInstructor
 SELECT user_id,
        course_id,

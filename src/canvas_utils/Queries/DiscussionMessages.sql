@@ -12,6 +12,8 @@ CREATE TABLE DiscussionMessages (
     disc_type varchar(20)
     ) ENGINE = MyISAM;
 
+# <end_creation>
+
 # SET @COURSE_NAME = 'F18-CEE-120A-01/220A-01';
 # SET @COURSE_ID_1   = '35910000000088714';
 
