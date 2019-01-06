@@ -100,7 +100,9 @@ class CanvasPrep(object):
             pwd = self.get_db_pwd()
             
         if target_db is None:
-            target_db = CanvasPrep.canvas_db_aux
+            self.target_db = CanvasPrep.canvas_db_aux
+        else:
+            self.target_db = target_db
 
         self.setup_logging()
         self.logger.setLevel(logging_level)
@@ -153,66 +155,42 @@ class CanvasPrep(object):
         # initialize a dict of tables alreay done. The dict
         # is a persistent object:
         
-        num_tables_to_do = num_tables 
-        if create_all:
-            # Easy: doesn't matter which tables are already there:
-            completed_tables_dict = None
-        else:
-            # Is there an existing dict of healthy tables pickled to a file?
-            
-            if os.path.exists(CanvasPrep.healthy_tables_dict_file):
-                with open(CanvasPrep.healthy_tables_dict_file, 'rb') as fd:
-                    completed_tables_dict = pickle.load(fd)
-                num_tables_to_do = len(CanvasPrep.tables) - len(completed_tables_dict)
-            else:
-                completed_tables_dict = None
+        completed_tables = self.get_existing_tables()
         
         # Get a fresh copy of the Explore Courses .xml file?
         
-        if completed_tables_dict is None or completed_tables_dict.get('ExploreCourses', None) is None:
+        if create_all or 'ExploreCourses' not in completed_tables: 
             # We are supposed to refresh the ExploreCourses table.
-            # Get pull a fresh .xml file, and conver it to .csv:
+            # Get pull a fresh .xml file, and convert it to .csv:
             self.pull_explore_courses()
             
-        # Create the tables that are needed. The method will update
-        # completed_tables_dict as it succeeds building tables. So,
-        # even if an error is eventually encountered, the dict
-        # will be updates, since Python passes pointers. Also,
-        # create_tables() saves the dict to disk:
-        
+        # Create the other tables that are needed.
         try:
-            self.create_tables(completed_tables=completed_tables_dict)
+            completed_tables = self.create_tables(completed_tables=completed_tables)
         finally:
-            # For good measure: save the dict of done tables,
-            # even though create_tables() also saves:
-            self.save_table_done_dict(completed_tables_dict)
-            
-        if num_tables_to_do < num_tables:
-            not_done = num_tables - num_tables_to_do
-            self.log_info("(Re)created %s tables. Already existing: %s. Done" %\
-                          (num_tables_to_do, not_done))
-        else:
+            pass
+        
+        
+        if create_all:
             self.log_info("Created all %s tables. Done." % num_tables)
+        else:
+            not_done = num_tables - len(completed_tables)
+            self.log_info("(Re)created %s tables. Already existing: %s. Done" %\
+                          (not_done, len(completed_tables)))
         
     #-------------------------
     #  create_tables
     #--------------
         
-    def create_tables(self, completed_tables=None):
+    def create_tables(self, completed_tables=[]):
         '''
         Runs through the tl_creation_paths list of table
         creation .sql files, and executes each. 
         
-        The completed_tables parameter is a dict mapping
-        table names to True. Presence in this dict indicates
-        that the respective table is present and complete
-        in the database from some earlier run.  
-        
-        If completed_tables is None, we will create
-        the dict, and populate it with all tables that
-        we succeed to build. If not None, we only try to 
-        create tables that are not already done, and
-        we add those to the dict.
+        The completed_tables parameter is list of tables
+        that are currently already in the target db. None of
+        those tables will be replaced. If all tables are to
+        be created, set the parameter to an empty table.
         
         @param completed_tables: dictionary of completed tables
         @type completed_tables: {str : bool}
@@ -220,9 +198,9 @@ class CanvasPrep(object):
         @rtype: {str : bool}
         '''
         
-        if completed_tables is None:
+        if len(completed_tables) == 0 or completed_tables is None:
             do_all = True
-            completed_tables = {}
+            completed_tables = []
         else:
             do_all = False
           
@@ -230,7 +208,9 @@ class CanvasPrep(object):
             tbl_nm = self.tbl_nm_from_file(tbl_file_path)
             
             # Do we need to create this table?
-            if not do_all and completed_tables.get(tbl_nm, None) is not None:
+            if not do_all and \
+                tbl_nm.lower() in completed_tables or \
+                tbl_nm in completed_tables:
                 # Nope, got that one already
                 continue
                 
@@ -238,6 +218,7 @@ class CanvasPrep(object):
             if special_handler is not None:
                 self.handle_complicated_case(tbl_file_path, tbl_nm)
                 continue
+            
             # Simple case: get query as string:
             with open(tbl_file_path, 'r') as fd:
                 query = fd.read().strip()
@@ -257,9 +238,7 @@ class CanvasPrep(object):
                 raise RuntimeError("Could not create table %s: %s" %\
                                    (tbl_nm, str(errors))
                                    )
-            completed_tables[tbl_nm] = True
-            # Save dict of done tables to disc:
-            self.save_table_done_dict(completed_tables)
+            completed_tables.append(tbl_nm)
             self.log_info('Done working on table %s' % tbl_nm)
         return completed_tables
         
@@ -300,6 +279,40 @@ class CanvasPrep(object):
     
     def create_quiz_dim(self):
         pass
+    
+    #-------------------------
+    # get_existing_tables 
+    #--------------
+    
+    def get_existing_tables(self):
+        '''
+        Returns list of auxiliary canvas table names that are
+        already in the target db for auxiliary tables. So: even
+        if tables other than the ones listed in CanvasPrep.tables
+        exist in the target db, only members of CanvasPrep.tables
+        are considered. Others are ignored.
+        
+        @return: list of tables existing in target db
+        @rtype: [str]
+        '''
+        
+        # Some versions of MySQL mess with case, so 
+        # normalize our table list for the purpose of 
+        # comparing with tables found:
+        
+        all_relevant_tbls = [tbl_nm.lower() for tbl_nm in CanvasPrep.tables]
+        
+        existing_tbls = []
+        tbl_names_query = '''
+                          SELECT table_name 
+                            FROM information_schema.tables 
+                           WHERE table_schema = 'canvasdata_aux';
+                         '''
+        for tbl_name in self.db.query(tbl_names_query):
+            if tbl_name.lower() in all_relevant_tbls:
+                existing_tbls.append(tbl_name)
+                
+        return existing_tbls
         
     #-------------------------
     # get_db_pwd
