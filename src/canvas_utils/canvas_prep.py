@@ -269,7 +269,10 @@ class CanvasPrep(object):
         
     def pull_explore_courses(self):
         
-        puller = ECPuller(CanvasPrep.ec_xml_file,
+        # Need absolute path to XML file:
+        ec_xml_path = os.path.join(os.path.dirname(__file__), CanvasPrep.ec_xml_file)
+        
+        puller = ECPuller(ec_xml_path,
                           overwrite_existing=True,
                           log_level=self.logger.level,
                           logger=self.logger
@@ -277,7 +280,7 @@ class CanvasPrep(object):
         # Do the retrieval of a new .xml file from
         # the HTTP server:
         puller.pull_ec()
-        
+                
         # Convert the .xml to .csv:
         (xml_file_root, _ext) = os.path.splitext(CanvasPrep.ec_xml_file)
         csv_outfile = xml_file_root + '.csv'
