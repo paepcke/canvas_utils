@@ -85,7 +85,7 @@ class CanvasPrep(object):
     def __init__(self, 
                  user=None, 
                  pwd=None, 
-                 db=None, 
+                 target_db=None, 
                  host='localhost',
                  create_all=False, 
                  logging_level=logging.INFO):
@@ -99,14 +99,16 @@ class CanvasPrep(object):
         if pwd is None:
             pwd = self.get_db_pwd()
             
-        if db is None:
-            db = CanvasPrep.canvas_db_aux
+        if target_db is None:
+            target_db = CanvasPrep.canvas_db_aux
 
         self.setup_logging()
         self.logger.setLevel(logging_level)
         
-        if self.create_all:
-            self.log_info("NOTE: only creating tables not already in {}. Use --all to replace all.".format(db))
+        if not create_all:
+            self.log_info("NOTE: only creating tables not already in {}. Use --all to replace all.".format(target_db))
+        else:
+            self.log_info("NOTE: creating all tables overwriting those already in {}. Use --all to replace all.".format(target_db))
         
         # Number of tables that exist; only some of those
         # might need to be (re)created:
@@ -127,7 +129,7 @@ class CanvasPrep(object):
                       
         self.db = self.log_into_mysql(user, 
                                       pwd, 
-                                      db=CanvasPrep.canvas_db_aux,
+                                      db=target_db,
                                       host=host)
         
         self.log_info('Done connecting to db.')
@@ -144,13 +146,20 @@ class CanvasPrep(object):
         # use:
         self.special_tables = {}
         
+        # Set parameters such as acceptable datetime formats:
         self.prep_db()
+        
+        # Determine how many tables need to be done, and 
+        # initialize a dict of tables alreay done. The dict
+        # is a persistent object:
         
         num_tables_to_do = num_tables 
         if create_all:
+            # Easy: doesn't matter which tables are already there:
             completed_tables_dict = None
         else:
-            # Is there an existing dict of healthy tables?
+            # Is there an existing dict of healthy tables pickled to a file?
+            
             if os.path.exists(CanvasPrep.healthy_tables_dict_file):
                 with open(CanvasPrep.healthy_tables_dict_file, 'rb') as fd:
                     completed_tables_dict = pickle.load(fd)
@@ -158,7 +167,8 @@ class CanvasPrep(object):
             else:
                 completed_tables_dict = None
         
-        # Get a fresh copy of the Explore Courses .xml file:
+        # Get a fresh copy of the Explore Courses .xml file?
+        
         if completed_tables_dict is None or completed_tables_dict.get('ExploreCourses', None) is None:
             # We are supposed to refresh the ExploreCourses table.
             # Get pull a fresh .xml file, and conver it to .csv:
@@ -169,6 +179,7 @@ class CanvasPrep(object):
         # even if an error is eventually encountered, the dict
         # will be updates, since Python passes pointers. Also,
         # create_tables() saves the dict to disk:
+        
         try:
             self.create_tables(completed_tables=completed_tables_dict)
         finally:
@@ -471,20 +482,20 @@ if __name__ == '__main__':
     
     parser.add_argument('-a', '--all',
                         help='if present, already existing tables are retained; others are added. Else all tables refreshed. Default: False',
-                        action='store_false');
+                        action='store_true');
                         
     parser.add_argument('-q', '--quiet',
                         help='if present, only error conditions are shown on screen. Default: False',
-                        action='store_false');
+                        action='store_true');
                         
 
     args = parser.parse_args();
     
     
     CanvasPrep(user=args.user,
-               pwd=args.pwd,
+               pwd=args.password,
                host=args.host,
-               db=args.database,
+               target_db=args.database,
                create_all=args.all,
                logging_level=logging.ERROR if args.quiet else logging.INFO  
                )
