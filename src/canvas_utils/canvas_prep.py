@@ -473,6 +473,7 @@ if __name__ == '__main__':
                         
     parser.add_argument('-p', '--password',
                         help='password for logging into the canvas database. Default: content of $HOME/.ssh/canvas_db',
+                        action='store_true',
                         default=None)
                         
     parser.add_argument('-t', '--host',
@@ -493,10 +494,15 @@ if __name__ == '__main__':
                         
 
     args = parser.parse_args();
-    
-    
+
+    if args.password:
+        # Get pwd from CLI with invisible chars:
+        pwd = getpass.getpass('Password for user {given_user} at {host}: '.format(given_user=args.user,
+                                                                                host=args.host))
+    else:
+        pwd = None
     CanvasPrep(user=args.user,
-               pwd=args.password,
+               pwd=pwd,
                host=args.host,
                target_db=args.database,
                create_all=args.all,
