@@ -63,7 +63,6 @@ class CanvasPrep(object):
                 'DiscussionTopics',
                 'Graders',
                 'GradingProcess',
-                'QuizDim',
                 'RequirementsFill',
                 'StudentUnits',
                 'Students',
