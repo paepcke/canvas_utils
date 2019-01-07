@@ -203,8 +203,9 @@ class CanvasPrep(object):
             tbl_nm = self.tbl_nm_from_file(tbl_file_path)
             
             # Do we need to create this table?
-            if not create_all and \
-                tbl_nm.lower() in completed_tables or \
+            if (not create_all and \
+                tbl_nm.lower() in completed_tables
+                ) or \
                 tbl_nm in completed_tables:
                 # Nope, got that one already
                 continue

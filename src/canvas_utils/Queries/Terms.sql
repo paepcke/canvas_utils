@@ -11,4 +11,4 @@ INSERT INTO Terms
 SELECT DISTINCT id, name, date_start
   FROM <canvas_db>.enrollment_term_dim;
 
-CREATE index trm_id_idx ON terms(term_id);
+CREATE INDEX trm_id_idx ON Terms(term_id);
