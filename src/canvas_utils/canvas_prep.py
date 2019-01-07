@@ -166,7 +166,9 @@ class CanvasPrep(object):
         try:
             completed_tables = self.create_tables(completed_tables=completed_tables)
         finally:
-            pass
+            self.log_info('Closing db...')
+            self.db.close()
+            self.log_info('Done closing db.')
         
         
         if create_all:
