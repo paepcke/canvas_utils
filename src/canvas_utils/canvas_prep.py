@@ -104,7 +104,7 @@ class CanvasPrep(object):
         if not create_all:
             self.log_info("NOTE: only creating tables not already in {}. Use --all to replace all.".format(target_db))
         else:
-            self.log_info("NOTE: creating all tables overwriting those already in {}. Use --all to replace all.".format(target_db))
+            self.log_info("NOTE: creating all tables overwriting those already in {}.".format(target_db))
             
         # Under certain conditions __file__ is a relative path.
         # Ensure availability of an absolute path:
@@ -134,16 +134,11 @@ class CanvasPrep(object):
         
         self.log_info('Done connecting to db.')
         
-        # Construct a dict that maps table names that require
-        # more than just running the SQL in the respective table
-        # creation file to methods in this class that know how
-        # to handle the necessary computations:
-        
         # Used to have tables whose .sql was not self-contained;
         # it needed non-sql activity before or after. We took
         # care of these, but keep this mechanism for special
         # treatment in create_tables() in place for possible
-        # use:
+        # future use:
         self.special_tables = {}
         
         # Set parameters such as acceptable datetime formats:
@@ -164,7 +159,7 @@ class CanvasPrep(object):
             
         # Create the other tables that are needed.
         try:
-            completed_tables = self.create_tables(completed_tables=completed_tables)
+            completed_tables = self.create_tables(completed_tables=completed_tables, create_all=create_all)
         finally:
             self.log_info('Closing db...')
             self.db.close()
@@ -182,7 +177,7 @@ class CanvasPrep(object):
     #  create_tables
     #--------------
         
-    def create_tables(self, completed_tables=[]):
+    def create_tables(self, completed_tables=[], create_all=False):
         '''
         Runs through the tl_creation_paths list of table
         creation .sql files, and executes each. 
@@ -194,21 +189,18 @@ class CanvasPrep(object):
         
         @param completed_tables: dictionary of completed tables
         @type completed_tables: {str : bool}
+        @param create_all: whether or not to overwrite existing tables. 
+            If True, do overwrite.
+        @type create_all: bool
         @return: a new, or augmented table completion dict
         @rtype: {str : bool}
         '''
         
-        if len(completed_tables) == 0 or completed_tables is None:
-            do_all = True
-            completed_tables = []
-        else:
-            do_all = False
-          
         for tbl_file_path in CanvasPrep.tbl_creation_paths:
             tbl_nm = self.tbl_nm_from_file(tbl_file_path)
             
             # Do we need to create this table?
-            if not do_all and \
+            if not create_all and \
                 tbl_nm.lower() in completed_tables or \
                 tbl_nm in completed_tables:
                 # Nope, got that one already
