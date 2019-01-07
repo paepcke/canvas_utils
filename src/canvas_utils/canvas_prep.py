@@ -159,7 +159,10 @@ class CanvasPrep(object):
             
         # Create the other tables that are needed.
         try:
-            completed_tables = self.create_tables(completed_tables=completed_tables, create_all=create_all)
+            if create_all:
+                completed_tables = []
+            completed_tables = self.create_tables(completed_tables=completed_tables, 
+                                                  create_all=create_all)
         finally:
             self.log_info('Closing db...')
             self.db.close()
