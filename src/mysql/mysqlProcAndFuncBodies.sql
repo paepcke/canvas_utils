@@ -13,6 +13,11 @@
 # Set the statement delimiter to something other than ';'
 # so the procedure can use ';':
 
+# Make MySQL trust that our specs of DETERMINISTIC, READS SQL DATA, etc,
+# are correct:
+
+SET GLOBAL log_bin_trust_function_creators = 1;
+
 delimiter //
 
 #--------------------------
