@@ -1,20 +1,9 @@
-# Copyright (c) 2014, Stanford University
-# All rights reserved.
-#
-# Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
-# 1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
-# 2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
-# 3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
-#
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+# Handy MySQL functions and stored procedures
 
-# Stored procedures used for administering the Edx
-# tracking log database and others.
-
-# NOTE: these functions and procedures need to be
+# NOTE: these functions and procedures must be
 #       defined in all the databases where they
 #       are needed.
-
+#
 #       This file is 'source'ed either via
 #
 #          mysql ... < mysqlProcAndFuncBodies.sql
@@ -23,9 +12,8 @@
 
 # Set the statement delimiter to something other than ';'
 # so the procedure can use ';':
-delimiter //
 
-#USE Edx//
+delimiter //
 
 #--------------------------
 # createIndexIfNotExists
@@ -223,6 +211,7 @@ DROP FUNCTION IF EXISTS indexExists//
 CREATE FUNCTION indexExists(the_table_name varchar(255),
                         the_col_name varchar(255))
 RETURNS BOOL
+READS SQL DATA
 BEGIN
     IF ((SELECT COUNT(*)
          FROM information_schema.statistics
@@ -246,6 +235,7 @@ END//
 DROP FUNCTION IF EXISTS anyIndexExists//
 CREATE FUNCTION anyIndexExists(the_table_name varchar(255))
 RETURNS BOOL
+READS SQL DATA
 BEGIN
     IF ((SELECT COUNT(*)
          FROM information_schema.statistics
@@ -270,6 +260,7 @@ END//
 DROP FUNCTION IF EXISTS functionExists//
 CREATE FUNCTION functionExists(fully_qualified_funcname varchar(255))
 RETURNS BOOL
+READS SQL DATA
 BEGIN
     SELECT SUBSTRING_INDEX(fully_qualified_funcname,'.',1) INTO @the_db_name;
     SELECT SUBSTRING_INDEX(fully_qualified_funcname,'.',-1) INTO @the_func_name;
@@ -456,7 +447,8 @@ END//
 
 DROP FUNCTION IF EXISTS dateInQuarter//
 CREATE FUNCTION dateInQuarter(dateInQuestion DATETIME, quarter varchar(6), academic_year varchar(4))
-RETURNS BOOLEAN DETERMINISTIC
+RETURNS BOOLEAN
+DETERMINISTIC
 BEGIN
     DECLARE acQuarterNumber INT DEFAULT QUARTER(DATE_ADD(dateInQuestion, INTERVAL 1 MONTH));
     # If passed in wildcard, double it so that
