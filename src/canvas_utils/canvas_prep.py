@@ -18,10 +18,6 @@ from pymysql_utils.pymysql_utils import MySQLDB
 
 from pull_explore_courses import ECPuller
 
-
-# Enable import from sibling modules in this
-# same package (insane that this is complicated!):
-#sys.path.insert(0, os.path.dirname(__file__))
 class CanvasPrep(object):
     '''
     Draws on continuously changing data from Canvas.
@@ -92,7 +88,6 @@ class CanvasPrep(object):
         '''
         Constructor
         '''
-        
         if user is None:
             user = CanvasPrep.default_user
             
@@ -111,6 +106,10 @@ class CanvasPrep(object):
             self.log_info("NOTE: only creating tables not already in {}. Use --all to replace all.".format(target_db))
         else:
             self.log_info("NOTE: creating all tables overwriting those already in {}. Use --all to replace all.".format(target_db))
+            
+        # Under certain conditions __file__ is a relative path.
+        # Ensure availability of an absolute path:
+        self.curr_dir = os.path.dirname(os.path.realpath(__file__))
         
         # Number of tables that exist; only some of those
         # might need to be (re)created:
@@ -229,7 +228,7 @@ class CanvasPrep(object):
             # db name of the Canvas product db:
             query = query.replace('<canvas_db>', CanvasPrep.canvas_db_nm)
             query = query.replace('<canvas_aux>', CanvasPrep.canvas_db_aux)
-            query = query.replace('<data_dir>', os.path.join(os.path.dirname(__file__), 'Data'))
+            query = query.replace('<data_dir>', os.path.join(self.curr_dir, 'Data'))
             
             
             self.log_info('Working on table %s...' % tbl_nm)
@@ -249,7 +248,7 @@ class CanvasPrep(object):
     def pull_explore_courses(self):
         
         # Need absolute path to XML file:
-        ec_xml_path = os.path.join(os.path.dirname(__file__), CanvasPrep.ec_xml_file)
+        ec_xml_path = os.path.join(self.curr_dir, CanvasPrep.ec_xml_file)
         
         puller = ECPuller(ec_xml_path,
                           overwrite_existing=True,
@@ -407,7 +406,7 @@ class CanvasPrep(object):
     #--------------
     
     def file_nm_from_tble(self, tbl_nm):
-        this_dir = os.path.dirname(__file__)
+        this_dir = self.curr_dir
         return os.path.join(this_dir, 'Queries', tbl_nm) + '.sql'
     
     #-------------------------
@@ -418,8 +417,7 @@ class CanvasPrep(object):
         
         # All queries are in subdir 'Queries' of
         # this script's directory:
-        curr_dir  = os.path.dirname(__file__)
-        query_dir = os.path.join(curr_dir, 'Queries')
+        query_dir = os.path.join(self.curr_dir, 'Queries')
         return query_dir 
 
     #-------------------------
