@@ -49,42 +49,42 @@ SELECT CourseAssignments.account_id,
        '35910000000000025'
        );
 
-# Output CourseAssignments, AssignmentSubmissions, GradingProcess
-# to csv. This happens on laptop:
+-- # Output CourseAssignments, AssignmentSubmissions, GradingProcess
+-- # to csv. This happens on laptop:
 
-# CourseAssignments:
+-- # CourseAssignments:
 
-#mysql -u <canvas_db> -p -h canvasdata-prd-db1.ci6ilhrc8rxe.us-west-1.rds.amazonaws.com Andreas -N -B -e \
-SELECT 'account_id','course_id','course_name','term_name','assignment_id','assignment_group_id',
-       'assignment_name','submission_types','points_possible','grading_type','assignment_state',
-       'workflow_state','due_date','group_assignment_name','group_assignment_weight',
-       'group_assignment_current_score','group_assignment_final_score'
-UNION ALL
-SELECT * INTO OUTFILE '/tmp/courseAssignments.tsv'
-    FIELDS TERMINATED BY "," OPTIONALLY ENCLOSED BY '"' LINES TERMINATED BY '\n'
-  FROM CourseAssignments;
+-- #mysql -u <canvas_db> -p -h canvasdata-prd-db1.ci6ilhrc8rxe.us-west-1.rds.amazonaws.com Andreas -N -B -e \
+-- SELECT 'account_id','course_id','course_name','term_name','assignment_id','assignment_group_id',
+--        'assignment_name','submission_types','points_possible','grading_type','assignment_state',
+--        'workflow_state','due_date','group_assignment_name','group_assignment_weight',
+--        'group_assignment_current_score','group_assignment_final_score'
+-- UNION ALL
+-- SELECT * INTO OUTFILE '/tmp/courseAssignments.tsv'
+--     FIELDS TERMINATED BY "," OPTIONALLY ENCLOSED BY '"' LINES TERMINATED BY '\n'
+--   FROM CourseAssignments;
 
-# AssignmentSubmissions
+-- # AssignmentSubmissions
 
-#mysql -u <canvas_db> -p -h canvasdata-prd-db1.ci6ilhrc8rxe.us-west-1.rds.amazonaws.com Andreas -N -B -e \
-SELECT 'account_id','course_id','course_name','term_name','submission_id',
-       'assignment_id','assignment_name','assignment_description','quiz_submission_id',
-       'grader_id','user_id','enrollment_term_id','assignment_group_id',
-       'grade_letter','grade_numeric','points_possible','submitted_at',
-       'graded_at','grade_state','excused'
-UNION ALL
-SELECT * INTO outfile '/tmp/assignmentSubmissions.tsv'
-    FIELDS TERMINATED BY "," OPTIONALLY ENCLOSED BY '"' LINES TERMINATED BY '\n'
-  FROM AssignmentSubmissions;
+-- #mysql -u <canvas_db> -p -h canvasdata-prd-db1.ci6ilhrc8rxe.us-west-1.rds.amazonaws.com Andreas -N -B -e \
+-- SELECT 'account_id','course_id','course_name','term_name','submission_id',
+--        'assignment_id','assignment_name','assignment_description','quiz_submission_id',
+--        'grader_id','user_id','enrollment_term_id','assignment_group_id',
+--        'grade_letter','grade_numeric','points_possible','submitted_at',
+--        'graded_at','grade_state','excused'
+-- UNION ALL
+-- SELECT * INTO outfile '/tmp/assignmentSubmissions.tsv'
+--     FIELDS TERMINATED BY "," OPTIONALLY ENCLOSED BY '"' LINES TERMINATED BY '\n'
+--   FROM AssignmentSubmissions;
 
-# Grading process:
+-- # Grading process:
 
-# mysql -u <canvas_db> -p -h canvasdata-prd-db1.ci6ilhrc8rxe.us-west-1.rds.amazonaws.com Andreas -N -B -e \
-SELECT 'reaccount_id','course_id','course_name','enrollment_term_id','grader_id',
-       'assignment_id','submission_id','user_id','grade_letter','grade_numeric',
-       'grading_type','grade_state','group_assignment_final_score',
-       'group_assignment_weight','points_possible'
-UNION ALL
-SELECT * INTO OUTFILE '/tmp/gradingProcess.tsv'
-    FIELDS TERMINATED BY "," OPTIONALLY ENCLOSED BY '"' LINES TERMINATED BY '\n'
-FROM GradingProcess
+-- # mysql -u <canvas_db> -p -h canvasdata-prd-db1.ci6ilhrc8rxe.us-west-1.rds.amazonaws.com Andreas -N -B -e \
+-- SELECT 'reaccount_id','course_id','course_name','enrollment_term_id','grader_id',
+--        'assignment_id','submission_id','user_id','grade_letter','grade_numeric',
+--        'grading_type','grade_state','group_assignment_final_score',
+--        'group_assignment_weight','points_possible'
+-- UNION ALL
+-- SELECT * INTO OUTFILE '/tmp/gradingProcess.tsv'
+--     FIELDS TERMINATED BY "," OPTIONALLY ENCLOSED BY '"' LINES TERMINATED BY '\n'
+-- FROM GradingProcess

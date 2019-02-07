@@ -53,12 +53,12 @@ class CanvasPrep(object):
                 'AllUsers',
                 'AssignmentSubmissions',
                 'ExploreCourses',
+                'Courses',
                 'CourseAssignments',
                 'Instructors',
                 'CourseInstructor',
                 'CourseInstructorTeams',
                 'CourseEnrollment',
-                'Courses',
                 'DiscussionMessages',
                 'DiscussionTopics',
                 'Graders',
@@ -82,11 +82,27 @@ class CanvasPrep(object):
                  pwd=None, 
                  target_db=None, 
                  host='localhost',
-                 create_all=False, 
+                 create_all=False,
+                 tables=[], 
                  logging_level=logging.INFO):
         '''
-        Constructor
+        
+        @param user: login user for database
+        @type user: str
+        @param pwd: password for database
+        @type pwd:str
+        @param target_db: schema into which to place new tables in target database
+        @type target_db: str
+        @param host: MySQL host name
+        @type host: str
+        @param create_all: whether or not to replace tables that already exist
+        @type create_all: bool
+        @param tables: optional list of tables to (re)-create
+        @type tables: [str]
+        @param logging_level: how much of the run to document
+        @type logging_level: logging.INFO/DEBUG/ERROR/...
         '''
+        
         if user is None:
             user = CanvasPrep.default_user
             
@@ -97,6 +113,12 @@ class CanvasPrep(object):
             self.target_db = CanvasPrep.canvas_db_aux
         else:
             self.target_db = target_db
+
+        # If user wants only particular tables to be created
+        # (subject to create_all), then the tables arg will be
+        # a list of table names:
+        if tables is not None and len(tables) > 0:
+            CanvasPrep.tables = tables
 
         self.setup_logging()
         self.logger.setLevel(logging_level)
@@ -484,21 +506,29 @@ if __name__ == '__main__':
                         action='store_true',
                         default=None)
                         
-    parser.add_argument('-t', '--host',
-                        help='host name or ip of database. Default: canvasdata-prd-db1.ci6ilhrc8rxe.us-west-1.rds.amazonaws.com',
-                        default='canvasdata-prd-db1.ci6ilhrc8rxe.us-west-1.rds.amazonaws.com')
+    parser.add_argument('-o', '--host',
+                        help='host name or ip of database. Default: Canvas production database.',
+                        default='canvasdata-prd-db1.cupga556ks1y.us-west-1.rds.amazonaws.com')
                         
+    parser.add_argument('-t', '--table',
+                        nargs='+',
+                        help='Name of specific table to create (subject to --all arg); option can be repeated.',
+                        default=[]
+                        )
+
     parser.add_argument('-d', '--database',
                         help='MySQL/Aurora database (schema) into which new tables are to be placed. Default: canvasdata_aux',
                         default='canvasdata_aux')
     
     parser.add_argument('-a', '--all',
                         help='if present, already existing tables are retained; others are added. Else all tables refreshed. Default: False',
-                        action='store_true');
+                        action='store_true',
+                        default=False);
                         
     parser.add_argument('-q', '--quiet',
                         help='if present, only error conditions are shown on screen. Default: False',
-                        action='store_true');
+                        action='store_true',
+                        default=False);
                         
 
     args = parser.parse_args();
@@ -514,5 +544,6 @@ if __name__ == '__main__':
                host=args.host,
                target_db=args.database,
                create_all=args.all,
+               tables=args.table,
                logging_level=logging.ERROR if args.quiet else logging.INFO  
                )

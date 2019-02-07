@@ -127,5 +127,5 @@ if __name__ == '__main__':
     args = parser.parse_args();
 
         
-    finalizer = AuxTableFinalizer(args.sqlfile, args.prod_db, args.aux_db, args.data_dir)
-    sys.stdout.write(finalizer.finalize_tbl_creation(args.sql_file))
+    finalizer = AuxTableFinalizer(args.prod_db, args.aux_db, args.data_dir)
+    sys.stdout.write(finalizer.finalize_tbl_creation(args.sqlfile))

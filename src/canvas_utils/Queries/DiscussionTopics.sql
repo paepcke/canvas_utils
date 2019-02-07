@@ -20,6 +20,7 @@ CREATE TABLE DiscussionTopics (
 # <end_creation>
 
 
+# 2min:
 INSERT INTO DiscussionTopics
     SELECT
            <canvas_db>.discussion_topic_dim.id AS disc_topic_id,
@@ -52,6 +53,7 @@ CALL createIndexIfNotExists('top_id_top_fact_idx',
                              NULL);
 USE <canvas_aux>;
 
+# 15sec;
 UPDATE DiscussionTopics
   LEFT JOIN <canvas_db>.discussion_topic_fact
     ON DiscussionTopics.disc_topic_id = <canvas_db>.discussion_topic_fact.discussion_topic_id
@@ -60,12 +62,17 @@ UPDATE DiscussionTopics
 
 CREATE INDEX auth_id_idx ON DiscussionTopics(disc_topic_author_id);
 
-# Add author name and role 1min 30sec:
+# Add author name and role 30min:
+# Need to disable indexing to go from 30hrs
+# to 30 min:
+
+ALTER TABLE DiscussionTopics DISABLE KEYS;
 UPDATE DiscussionTopics
   LEFT JOIN AllUsers
     ON disc_topic_author_id   = user_id
   SET disc_topic_author_role  = role,
       disc_topic_author_name  = name;
+ALTER TABLE DiscussionTopics  ENABLE KEYS;      
 
 # Add the catalog course name: AA110, etc.
 

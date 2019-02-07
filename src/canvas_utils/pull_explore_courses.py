@@ -251,6 +251,6 @@ def stdout_redirected(new_stdout):
 if __name__ == '__main__':
     
     ec_puller = ECPuller('/tmp/ec.xml', log_level='info', overwrite_existing=True)
-    #****ec_puller.pull_ec()
+    ec_puller.pull_ec()
     ec_puller.ec_xml_to_csv('/tmp/ec.xml', '/tmp/ec.csv')
     #print("EC size: {}".format(ec_puller.bytes_pulled(human_readable=True)))   
