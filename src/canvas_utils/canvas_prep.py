@@ -59,7 +59,6 @@ class CanvasPrep(object):
                 'CourseInstructor',
                 'CourseInstructorTeams',
                 'CourseEnrollment',
-                'DiscussionMessages',
                 'DiscussionTopics',
                 'Graders',
                 'GradingProcess',
@@ -67,6 +66,7 @@ class CanvasPrep(object):
                 'StudentUnits',
                 'Students',
                 'TeachingAssistants',
+                'DiscussionMessages',
                 ]
     
     # Paths to the SQL files that do the work.
