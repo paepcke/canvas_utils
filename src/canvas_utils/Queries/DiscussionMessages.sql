@@ -34,6 +34,20 @@ INSERT INTO DiscussionMessages
       WHERE <canvas_db>.discussion_topic_dim.workflow_state = 'active';
 
 CREATE INDEX disc_id_idx ON DiscussionMessages(disc_id);
+USE canvasdata_prd;
+CALL createIndexIfNotExists('user_id_idx',
+                            'discussion_entry_fact',
+                            'user_id',
+                            NULL
+                            );
+CALL createIndexIfNotExists('msg_id_idx',
+                            'discussion_entry_fact',
+                            'discussion_entry_id',
+                            NULL
+                            );
+
+USE canvasdata_aux;                            
+
 
 # Fill in the user_id:
 UPDATE DiscussionMessages

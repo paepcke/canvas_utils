@@ -19,9 +19,9 @@ CREATE TABLE GradingProcess (
 
 # <end_creation>
     
-CREATE INDEX account_id_idx ON CourseAssignments(account_id, course_id);
+call createIndexIfNotExists('account_id_idx', 'CourseAssignments', 'account_id, course_id', NULL);
 # 1min 15sec:
-CREATE INDEX account_id_idx ON AssignmentSubmissions(account_id, course_id);
+call createIndexIfNotExists('account_id_idx', 'AssignmentSubmissions', 'account_id, course_id', NULL);
 
 # 5 min 8sec
 INSERT INTO GradingProcess

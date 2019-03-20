@@ -74,6 +74,7 @@ SELECT course_name,
 
 CREATE INDEX crs_id_indx ON RequirementsFill(stanford_course_id, quarter_name_canvas);
 
+DROP TABLE IF EXISTS RequirementsFillUniq;
 CREATE TABLE RequirementsFillUniq LIKE RequirementsFill;
 
 INSERT INTO RequirementsFillUniq
