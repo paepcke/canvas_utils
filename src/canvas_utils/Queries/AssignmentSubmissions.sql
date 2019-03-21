@@ -19,7 +19,8 @@ CREATE TABLE AssignmentSubmissions (
     submitted_at timestamp,
     graded_at timestamp,
     grade_state char(36),
-    excused char(36)
+    excused char(36),
+    student_name varchar(255)
     ) engine=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 # <end_creation>
@@ -61,7 +62,8 @@ SELECT
     submission_dim.submitted_at,
     submission_dim.graded_at,
     submission_dim.grade_state,
-    submission_dim.excused
+    submission_dim.excused,
+    NULL AS student_name
  FROM <canvas_db>.submission_dim
   LEFT JOIN <canvas_db>.submission_fact
   ON <canvas_db>.submission_fact.submission_id = <canvas_db>.submission_dim.id
@@ -73,9 +75,15 @@ SELECT
        '35910000000000025'
        );
 
-CREATE INDEX enr_trm_id_idx ON AssignmentSubmissions(enrollment_term_id);
-CREATE INDEX crs_id_idx ON AssignmentSubmissions(course_id);
+CALL createIndexIfNotExists('enr_trm_id_idx',
+                            'AssignmentSubmissions',
+                            'enrollment_term_id',
+                            NULL);
 
+CALL createIndexIfNotExists('crs_id_idx',
+                            'AssignmentSubmissions',
+                            'course_id',
+                            NULL);
 # Fill in the course name:
 UPDATE AssignmentSubmissions
   LEFT JOIN <canvas_db>.course_dim
@@ -84,7 +92,10 @@ UPDATE AssignmentSubmissions
   SET AssignmentSubmissions.course_name = <canvas_db>.course_dim.name;
 
 # ~1min:
-CREATE INDEX ass_id ON AssignmentSubmissions(assignment_id);
+CALL createIndexIfNotExists('ass_id',
+                            'AssignmentSubmissions',
+                            'assignment_id',
+                             NULL);
 
 USE <canvas_db>;
 CALL createIndexIfNotExists('ass_id_idx',
@@ -119,3 +130,9 @@ UPDATE AssignmentSubmissions
     ON AssignmentSubmissions.assignment_id = <canvas_db>.assignment_dim.assignment_group_id
   SET AssignmentSubmissions.assignment_name = <canvas_db>.assignment_dim.title,
       AssignmentSubmissions.assignment_description = <canvas_db>.assignment_dim.description;
+
+# Add student name:
+UPDATE AssignmentSubmissions
+ LEFT JOIN Students using(user_id)
+ SET AssignmentSubmissions.student_name = Students.student_name;
+    
