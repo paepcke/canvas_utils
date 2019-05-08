@@ -25,8 +25,8 @@ class CanvasPrep(object):
     and visualizations.
     '''
 
-    #default_user = 'canvasdata_prd'
-    default_user = getpass.getuser()
+    default_user = 'canvasdata_prd'
+    #default_user = getpass.getuser()
     
     # Name of MySQL canvas data schema (db):
     canvas_db_nm = 'canvasdata_prd'
@@ -115,10 +115,12 @@ class CanvasPrep(object):
             self.target_db = target_db
 
         # If user wants only particular tables to be created
-        # (subject to create_all), then the tables arg will be
-        # a list of table names:
+        # then the tables arg will be a list of table names:
         if tables is not None and len(tables) > 0:
             CanvasPrep.tables = tables
+            # User explicitly asked for specific tables,
+            # we do overwrite: 
+            create_all = True
 
         self.setup_logging()
         self.logger.setLevel(logging_level)
@@ -126,7 +128,7 @@ class CanvasPrep(object):
         if not create_all:
             self.log_info("NOTE: only creating tables not already in {}. Use --all to replace all.".format(target_db))
         else:
-            self.log_info("NOTE: creating all tables overwriting those already in {}.".format(target_db))
+            self.log_info(f"NOTE: creating tables {CanvasPrep.tables}, overwriting those already in {target_db}.")
             
         # Under certain conditions __file__ is a relative path.
         # Ensure availability of an absolute path:
@@ -427,6 +429,19 @@ class CanvasPrep(object):
     def file_nm_from_tble(self, tbl_nm):
         this_dir = self.curr_dir
         return os.path.join(this_dir, 'Queries', tbl_nm) + '.sql'
+
+    #------------------------------------
+    # list_tables 
+    #-------------------    
+
+    @classmethod
+    def list_tables(cls):
+        '''
+        List tables that can be created to screen.
+        '''
+        print("Tables that can be created:")
+        for table in CanvasPrep.tables:
+            print(f"{table},")
     
     #-------------------------
     # get_queries_dir 
@@ -497,6 +512,11 @@ if __name__ == '__main__':
                                      description="Create auxiliary canvas tables."
                                      )
 
+    parser.add_argument('-l', '--list',
+                        help='list the aux tables known to this program',
+                        action='store_true',
+                        default=False);
+                        
     parser.add_argument('-u', '--user',
                         help='user name for logging into the canvas database. Default: {}'.format(CanvasPrep.default_user),
                         default=CanvasPrep.default_user)
@@ -512,7 +532,7 @@ if __name__ == '__main__':
                         
     parser.add_argument('-t', '--table',
                         nargs='+',
-                        help='Name of specific table to create (subject to --all arg); option can be repeated.',
+                        help='Name of specific table to create whether or not they already exist; option can be repeated.',
                         default=[]
                         )
 
@@ -532,6 +552,11 @@ if __name__ == '__main__':
                         
 
     args = parser.parse_args();
+
+    # Just wants list of tables?
+    if args.list:
+        CanvasPrep.list_tables()
+        sys.exit()
 
     if args.password:
         # Get pwd from CLI with invisible chars:
