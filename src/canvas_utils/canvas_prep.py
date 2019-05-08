@@ -82,7 +82,6 @@ class CanvasPrep(object):
                  pwd=None, 
                  target_db=None, 
                  host='localhost',
-                 create_all=False,
                  tables=[], 
                  logging_level=logging.INFO):
         '''
@@ -95,8 +94,6 @@ class CanvasPrep(object):
         @type target_db: str
         @param host: MySQL host name
         @type host: str
-        @param create_all: whether or not to replace tables that already exist
-        @type create_all: bool
         @param tables: optional list of tables to (re)-create
         @type tables: [str]
         @param logging_level: how much of the run to document
@@ -118,18 +115,10 @@ class CanvasPrep(object):
         # then the tables arg will be a list of table names:
         if tables is not None and len(tables) > 0:
             CanvasPrep.tables = tables
-            # User explicitly asked for specific tables,
-            # we do overwrite: 
-            create_all = True
 
         self.setup_logging()
         self.logger.setLevel(logging_level)
         
-        if not create_all:
-            self.log_info("NOTE: only creating tables not already in {}. Use --all to replace all.".format(target_db))
-        else:
-            self.log_info(f"NOTE: creating tables {CanvasPrep.tables}, overwriting those already in {target_db}.")
-            
         # Under certain conditions __file__ is a relative path.
         # Ensure availability of an absolute path:
         self.curr_dir = os.path.dirname(os.path.realpath(__file__))
@@ -176,35 +165,27 @@ class CanvasPrep(object):
         
         # Get a fresh copy of the Explore Courses .xml file?
         
-        if create_all or 'ExploreCourses' not in completed_tables: 
-            # We are supposed to refresh the ExploreCourses table.
-            # Get pull a fresh .xml file, and convert it to .csv:
-            self.pull_explore_courses()
+        # We are supposed to refresh the ExploreCourses table.
+        # Get pull a fresh .xml file, and convert it to .csv:
+        self.pull_explore_courses()
             
         # Create the other tables that are needed.
         try:
-            if create_all:
-                completed_tables = []
-            completed_tables = self.create_tables(completed_tables=completed_tables, 
-                                                  create_all=create_all)
+            completed_tables = []
+            completed_tables = self.create_tables(completed_tables=completed_tables)
+            
         finally:
             self.log_info('Closing db...')
             self.db.close()
             self.log_info('Done closing db.')
         
-        
-        if create_all:
-            self.log_info("Created all %s tables. Done." % num_tables)
-        else:
-            not_done = num_tables - len(completed_tables)
-            self.log_info("(Re)created %s tables. Already existing: %s. Done" %\
-                          (not_done, len(completed_tables)))
-        
+        self.log_info(f"(Re)created {len(completed_tables)} tables. Done")
+                              
     #-------------------------
     #  create_tables
     #--------------
         
-    def create_tables(self, completed_tables=[], create_all=False):
+    def create_tables(self, completed_tables=[]):
         '''
         Runs through the tl_creation_paths list of table
         creation .sql files, and executes each. 
@@ -216,9 +197,6 @@ class CanvasPrep(object):
         
         @param completed_tables: dictionary of completed tables
         @type completed_tables: {str : bool}
-        @param create_all: whether or not to overwrite existing tables. 
-            If True, do overwrite.
-        @type create_all: bool
         @return: a new, or augmented table completion dict
         @rtype: {str : bool}
         '''
@@ -226,14 +204,6 @@ class CanvasPrep(object):
         for tbl_file_path in CanvasPrep.tbl_creation_paths:
             tbl_nm = self.tbl_nm_from_file(tbl_file_path)
             
-            # Do we need to create this table?
-            if (not create_all and \
-                tbl_nm.lower() in completed_tables
-                ) or \
-                tbl_nm in completed_tables:
-                # Nope, got that one already
-                continue
-                
             special_handler = self.special_tables.get(tbl_nm, None)
             if special_handler is not None:
                 self.handle_complicated_case(tbl_file_path, tbl_nm)
@@ -528,7 +498,8 @@ if __name__ == '__main__':
                         
     parser.add_argument('-o', '--host',
                         help='host name or ip of database. Default: Canvas production database.',
-                        default='canvasdata-prd-db1.cupga556ks1y.us-west-1.rds.amazonaws.com')
+                        default='canvasdata-prd-db1.ci6ilhrc8rxe.us-west-1.rds.amazonaws.com')
+                        #default='canvasdata-prd-db1.cupga556ks1y.us-west-1.rds.amazonaws.com')
                         
     parser.add_argument('-t', '--table',
                         nargs='+',
@@ -540,11 +511,6 @@ if __name__ == '__main__':
                         help='MySQL/Aurora database (schema) into which new tables are to be placed. Default: canvasdata_aux',
                         default='canvasdata_aux')
     
-    parser.add_argument('-a', '--all',
-                        help='if present, already existing tables are retained; others are added. Else all tables refreshed. Default: False',
-                        action='store_true',
-                        default=False);
-                        
     parser.add_argument('-q', '--quiet',
                         help='if present, only error conditions are shown on screen. Default: False',
                         action='store_true',
@@ -568,7 +534,6 @@ if __name__ == '__main__':
                pwd=pwd,
                host=args.host,
                target_db=args.database,
-               create_all=args.all,
                tables=args.table,
                logging_level=logging.ERROR if args.quiet else logging.INFO  
                )
