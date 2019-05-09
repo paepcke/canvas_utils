@@ -13,6 +13,7 @@ import os
 import pickle
 import pwd
 import sys
+from datetime import datetime
 
 from pymysql_utils.pymysql_utils import MySQLDB
 
@@ -24,6 +25,13 @@ class CanvasPrep(object):
     Prepares auxiliary tables to facilitate analysis
     and visualizations.
     '''
+
+    # Production server
+    default_host = 'canvasdata-prd-db1.cupga556ks1y.us-west-1.rds.amazonaws.com'
+    
+    # Kathy server
+    #******default_host = 'canvasdata-prd-db1.ci6ilhrc8rxe.us-west-1.rds.amazonaws.com'
+    
 
     default_user = 'canvasdata_prd'
     #default_user = getpass.getuser()
@@ -51,6 +59,7 @@ class CanvasPrep(object):
                 'Terms',
                 'Accounts',
                 'AllUsers',
+                'Students',
                 'AssignmentSubmissions',
                 'ExploreCourses',
                 'Courses',
@@ -64,7 +73,6 @@ class CanvasPrep(object):
                 'GradingProcess',
                 'RequirementsFill',
                 'StudentUnits',
-                'Students',
                 'TeachingAssistants',
                 'DiscussionMessages',
                 ]
@@ -72,6 +80,10 @@ class CanvasPrep(object):
     # Paths to the SQL files that do the work.
     # Filled in constructor
     tbl_creation_paths = []
+    
+    # datetime format used for appending to table names
+    # for backups:
+    datetime_format = '%Y_%m_%d_%H_%M_%S'
     
     #-------------------------
     # Constructor 
@@ -423,6 +435,63 @@ class CanvasPrep(object):
         # this script's directory:
         query_dir = os.path.join(self.curr_dir, 'Queries')
         return query_dir 
+
+    #------------------------------------
+    # get_backup_table_name 
+    #-------------------    
+
+    def get_backup_table_name(self, table_name):
+        '''
+        Given a table name, return a new table name that
+        has the current datetime added. The result string
+        is acceptable as a table name. Example:
+           input:  foo
+           output: foo_2019_05_09_11_51_03
+        
+        @param table_name: name of table
+        @type table_name: str
+        @return: new table name with date attached
+        @rtype: str
+        '''
+        time_now = str(datetime.now().strftime(CanvasPrep.datetime_format))
+        return table_name + '_' + time_now
+        
+    #------------------------------------
+    # date_from_backup_table_name 
+    #-------------------    
+        
+    def date_from_backup_table_name(self, table_backup_name):
+        '''
+        Extract a datetime object from a table backup name
+        that was constructed via get_backup_table_name().
+        Example:
+            input:  foo_2019_05_09_11_51_03
+            output: datetime.datetime(2019, 5, 9, 11, 51, 3)
+        
+        @param table_backup_name: backup table name created by get_backup_table_name()
+        @type table_backup_name: str
+        @return: the datetime object that represents the backup time
+        @rtype: datetime.datetime
+        @raise ValueError: if table_backup_name is ill-formed.
+        '''
+        
+        first_underscore_loc = table_backup_name.find('_')
+        # Must have found the underscore after the base table name.
+        # Plus: length must longer than the underscore position. I.e.
+        # detect "foo", "foo_" as pathological:
+        if first_underscore_loc < 0 or len(table_backup_name) < first_underscore_loc + 1: 
+            raise ValueError(f"Parameter '{table_backup_name}' is not a proper backup table name.")
+        
+        # The datetime string follows the first underscore:    
+        datetime_fragment = table_backup_name[first_underscore_loc + 1:]
+
+        # Try to build a datetime object:
+        try:
+            dt_obj = datetime.strptime(datetime_fragment, CanvasPrep.datetime_format)
+        except ValueError:
+            raise ValueError(f"Parameter '{table_backup_name}' is not a proper backup table name; datetime does not parse.")
+            
+        return dt_obj
 
     #-------------------------
     # setup_logging 
