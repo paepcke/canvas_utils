@@ -84,18 +84,14 @@ class AuxTableFinalizer(object):
         '''
         
         if type(sql_file_or_fd) == str:
-            if not os.path.isabs(sql_file_or_fd):
-                queries_dir = os.path.join(self.curr_dir, 'Queries')
-                sql_file_or_fd = os.path.join(queries_dir, sql_file_or_fd)
-            else:
-                sql_file_or_fd = sql_file_or_fd
-        
+            file_path = sql_file_or_fd
             with open(sql_file_or_fd, 'r') as fd:
                 sql_txt = fd.read().strip()
-                
         else:
+            file_path = sql_file_or_fd.name
             sql_txt = sql_file_or_fd.read().strip()
             
+        print(f"Finalizing query for {os.path.basename(file_path)}...")
         sql_txt_final = sql_txt.replace('<canvas_db>', self.prod_db)
         sql_txt_final = sql_txt_final.replace('<canvas_aux>', self.aux_db)
         sql_txt_final = sql_txt_final.replace('<data_dir>', self.data_dir)

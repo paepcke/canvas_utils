@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 '''
 Created on May 2, 2019
 
@@ -40,11 +41,6 @@ class MassQueryFinalizer(object):
         # below this script's directory:
         if dest_dir is None:
             self.dest_dir = os.path.join(script_dir, 'FinalizedQueries')
-        elif not os.path.isabs(dest_dir):
-            # Dest dir given, but as relative path. Assume
-            # that means relative to this script's directory.
-            # Make it an absolute path:
-            self.dest_dir = os.path.join(script_dir, dest_dir)
         else:
             self.dest_dir = dest_dir
             
@@ -80,6 +76,8 @@ class MassQueryFinalizer(object):
             # the target directory:
             with open(os.path.join(self.dest_dir, sql_file_name), 'w') as fd:
                 fd.write(resolved_sql)
+                
+        print("Finalized all queries.")
 
 # --------------------- Main ------------------
 

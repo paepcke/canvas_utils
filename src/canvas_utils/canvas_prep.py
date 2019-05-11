@@ -6,18 +6,20 @@ Created on Jan 1, 2019
 '''
 
 import argparse
+import datetime
 import getpass
 import logging
 from os import getenv
 import os
 import pickle
 import pwd
+import re
 import sys
-from datetime import datetime
 
 from pymysql_utils.pymysql_utils import MySQLDB
 
 from pull_explore_courses import ECPuller
+
 
 class CanvasPrep(object):
     '''
@@ -27,10 +29,10 @@ class CanvasPrep(object):
     '''
 
     # Production server
-    default_host = 'canvasdata-prd-db1.cupga556ks1y.us-west-1.rds.amazonaws.com'
+    #default_host = 'canvasdata-prd-db1.cupga556ks1y.us-west-1.rds.amazonaws.com'
     
     # Kathy server
-    #******default_host = 'canvasdata-prd-db1.ci6ilhrc8rxe.us-west-1.rds.amazonaws.com'
+    default_host = 'canvasdata-prd-db1.ci6ilhrc8rxe.us-west-1.rds.amazonaws.com'
     
 
     default_user = 'canvasdata_prd'
@@ -85,6 +87,8 @@ class CanvasPrep(object):
     # for backups:
     datetime_format = '%Y_%m_%d_%H_%M_%S'
     
+    datetime_pat = re.compile('[0-9]{4}_[0-9]{2}_[0-9]{2}_[0-9]{2}_[0-9]{2}_[0-9]{2}$')
+    
     #-------------------------
     # Constructor 
     #--------------
@@ -94,10 +98,11 @@ class CanvasPrep(object):
                  pwd=None, 
                  target_db=None, 
                  host='localhost',
-                 tables=[], 
+                 tables=[],
+                 new_only=False,
+                 skip_backups=False, 
                  logging_level=logging.INFO):
         '''
-        
         @param user: login user for database
         @type user: str
         @param pwd: password for database
@@ -108,10 +113,16 @@ class CanvasPrep(object):
         @type host: str
         @param tables: optional list of tables to (re)-create
         @type tables: [str]
+        @param new_only: if true, only table that don't already exist are created
+        @type new_only: bool
+        @param skip_backups: if true, don't backup already existing tables before overwriting them
+        @type skip_backups: bool
         @param logging_level: how much of the run to document
         @type logging_level: logging.INFO/DEBUG/ERROR/...
         '''
-        
+
+        self.new_only = new_only
+        self.skip_backups = skip_backups
         if user is None:
             user = CanvasPrep.default_user
             
@@ -119,9 +130,9 @@ class CanvasPrep(object):
             pwd = self.get_db_pwd()
             
         if target_db is None:
-            self.target_db = CanvasPrep.canvas_db_aux
+            target_db = CanvasPrep.canvas_db_aux
         else:
-            self.target_db = target_db
+            target_db = target_db
 
         # If user wants only particular tables to be created
         # then the tables arg will be a list of table names:
@@ -135,10 +146,6 @@ class CanvasPrep(object):
         # Ensure availability of an absolute path:
         self.curr_dir = os.path.dirname(os.path.realpath(__file__))
         
-        # Number of tables that exist; only some of those
-        # might need to be (re)created:
-        num_tables = len(CanvasPrep.tables)
-            
         # Create list of full paths to table
         # creation sql files:
         CanvasPrep.tbl_creation_paths = [self.file_nm_from_tble(tbl_nm) for tbl_nm in CanvasPrep.tables]
@@ -169,11 +176,30 @@ class CanvasPrep(object):
         # Set parameters such as acceptable datetime formats:
         self.prep_db()
         
-        # Determine how many tables need to be done, and 
-        # initialize a dict of tables alreay done. The dict
-        # is a persistent object:
+    #------------------------------------
+    # run 
+    #-------------------    
         
-        completed_tables = self.get_existing_tables()
+    def run(self):
+        
+        # Determine how many tables need to be done.
+        # If self.new_only is true, then only non-existing
+        # tables are to be done, else all of them:
+        
+        existing_tables = self.get_existing_tables()
+        
+        # Back up tables if:
+        #   o any tables already exist in the first place AND
+        #   o we are to overwrite existing tables AND
+        #   o we were not instructed to back up tables:
+        if len(existing_tables) > 0 and not self.new_only and not self.skip_backups:
+            self.backup_tables(existing_tables) 
+        
+        if self.new_only:
+            completed_tables = existing_tables
+        else:
+            # Just pretend no tables exist:
+            completed_tables = []
         
         # Get a fresh copy of the Explore Courses .xml file?
         
@@ -183,7 +209,6 @@ class CanvasPrep(object):
             
         # Create the other tables that are needed.
         try:
-            completed_tables = []
             completed_tables = self.create_tables(completed_tables=completed_tables)
             
         finally:
@@ -192,6 +217,54 @@ class CanvasPrep(object):
             self.log_info('Done closing db.')
         
         self.log_info(f"(Re)created {len(completed_tables)} tables. Done")
+
+    #------------------------------------
+    # backup_tables 
+    #-------------------    
+
+    def backup_tables(self, table_names):
+        '''
+        Given a list of aux tables, rename them to have current
+        datatime appended. 
+        
+        @param table_names: list of aux tables to back up
+        @type table_names: [str]
+        @return: datetime object whose string representation was
+            used to generate the backup table names.
+        @rtype: datetime.datetime
+        '''
+        
+        # Get current-time datetime instance in local 
+        # timezone (the 'None' parameter):
+        curr_time = datetime.datetime.now()
+        
+        # Create backup table names:
+        tbl_name_map = {}
+        
+        for tbl_nm in table_names:
+            tbl_name_map[tbl_nm] = self.get_backup_table_name(tbl_nm, curr_time)
+            
+        # SQL lets us rename many table in one cmd:
+        #   RENAME TABLE tb1 TO tb2, tb3 TO tb4;
+        # Build the "tb_nm TO tb_backup_nm" snippets:
+        
+        tbl_rename_snippets = [f" {tbl_nm} TO {self.get_backup_table_name(tbl_nm, curr_time)} " 
+                               for tbl_nm in table_names]
+        
+        # Stitch it all together into "RENAME TABLE foo TO foo_backup bar TO bar_backup;"
+        # by combining the string snippets with spaces:
+
+        rename_cmd = f"RENAME TABLE {' '.join(tbl_rename_snippets)};"
+
+        # Do it!
+        
+        self.log_info(f"Renaming {len(table_names)} tables to backup names...")
+        (errors, _warns) = self.db.execute(rename_cmd, doCommit=False)
+        if errors is not None:
+            raise RuntimeError(f"Could not rename at least some of tables {str(table_names)}")
+            
+        self.log_info(f"Done renaming {len(table_names)} tables to backup names.")
+        return curr_time
                               
     #-------------------------
     #  create_tables
@@ -440,59 +513,82 @@ class CanvasPrep(object):
     # get_backup_table_name 
     #-------------------    
 
-    def get_backup_table_name(self, table_name):
+    def get_backup_table_name(self, table_name, datetime_obj=None):
         '''
         Given a table name, return a new table name that
-        has the current datetime added. The result string
-        is acceptable as a table name. Example:
+        has the current datetime added in local timezone. The 
+        result string is acceptable as a table name. Example:
            input:  foo
            output: foo_2019_05_09_11_51_03
+           
+        If datetime_obj is provided, it must be a datetime.datetime
+        instance to use when creating the backup table name. 
+        Useful if several tables are being backed up one after the
+        other, and they are all to have the same datetime stamp.
+        The given time is converted to local time.
+        
+        It is the caller's responsibility to ensure absence of
+        name duplicates.
         
         @param table_name: name of table
         @type table_name: str
+        @param datetime_obj: a datetime.datetime instance to use in
+            the backup name generation
+        @type datetime_obj: datetime.datetime
         @return: new table name with date attached
         @rtype: str
+        @raise ValueError: if invalid datetime obj.
         '''
-        time_now = str(datetime.now().strftime(CanvasPrep.datetime_format))
+        
+        if datetime_obj is None:
+            # Local time (the 'None'):
+            datetime_obj =  datetime.datetime.now().astimezone(None)
+        elif type(datetime_obj) != datetime.datetime:
+            raise ValueError("If supplied, parameter datetime_obj must be a datetime.datetime instance.")
+        else:
+            # Make sure we use local time:
+            datetime_obj =  datetime_obj.astimezone(None)
+
+        time_now = str(datetime_obj.strftime(CanvasPrep.datetime_format))
         return table_name + '_' + time_now
-        
+
     #------------------------------------
-    # date_from_backup_table_name 
-    #-------------------    
-        
-    def date_from_backup_table_name(self, table_backup_name):
+    # backup_table_name_components
+    #-------------------
+    
+    def backup_table_name_components(self, backup_tbl_name):
         '''
-        Extract a datetime object from a table backup name
-        that was constructed via get_backup_table_name().
-        Example:
+        Given a backup table name, return the root table
+        name, the datetime string, and a datetime object from
+        that string.
+
             input:  foo_2019_05_09_11_51_03
-            output: datetime.datetime(2019, 5, 9, 11, 51, 3)
+            return: ('foo', '2019_05_09_11_51_03', datetime.datetime(2019, 5, 9, 11, 51, 3)
         
         @param table_backup_name: backup table name created by get_backup_table_name()
         @type table_backup_name: str
-        @return: the datetime object that represents the backup time
-        @rtype: datetime.datetime
+        @return: table name, datetime string, and datetime object
+        @rtype: (str, str, datetime.datetime)
         @raise ValueError: if table_backup_name is ill-formed.
         '''
-        
-        first_underscore_loc = table_backup_name.find('_')
-        # Must have found the underscore after the base table name.
-        # Plus: length must longer than the underscore position. I.e.
-        # detect "foo", "foo_" as pathological:
-        if first_underscore_loc < 0 or len(table_backup_name) < first_underscore_loc + 1: 
-            raise ValueError(f"Parameter '{table_backup_name}' is not a proper backup table name.")
-        
-        # The datetime string follows the first underscore:    
-        datetime_fragment = table_backup_name[first_underscore_loc + 1:]
-
-        # Try to build a datetime object:
         try:
-            dt_obj = datetime.strptime(datetime_fragment, CanvasPrep.datetime_format)
-        except ValueError:
-            raise ValueError(f"Parameter '{table_backup_name}' is not a proper backup table name; datetime does not parse.")
-            
-        return dt_obj
-
+            # Length of a backup table datetime string is
+            # 19: 'foo_bar_2019_09_03_23_04_10' without the
+            # underscore that separates the table name from
+            # the datetime. First ensure that the end of the
+            # table name is a proper datetime string:
+            dt_str = backup_tbl_name[-19:]
+            try:
+                dt_obj = datetime.datetime.strptime(dt_str, CanvasPrep.datetime_format)
+            except ValueError:
+                raise ValueError(f"Table name {backup_tbl_name} is not a valid backup name.")
+            # Next, get the front of the name without the
+            # separating underscore and datetime string:
+            tbl_name = backup_tbl_name[0:len(backup_tbl_name) - 20] 
+            return(tbl_name, dt_str, dt_obj) 
+        except IndexError:
+            raise ValueError(f"Non-conformant backup table name '{backup_tbl_name}'")
+        
     #-------------------------
     # setup_logging 
     #--------------
@@ -556,6 +652,16 @@ if __name__ == '__main__':
                         action='store_true',
                         default=False);
                         
+    parser.add_argument('-n', '--newonly',
+                        help="only create tables that don't already exist; default: false",
+                        action='store_true',
+                        default=False);
+                        
+    parser.add_argument('-s', '--skipbackup',
+                        help="don't back up tables that are overwritten; default: false",
+                        action='store_true',
+                        default=False);
+                        
     parser.add_argument('-u', '--user',
                         help='user name for logging into the canvas database. Default: {}'.format(CanvasPrep.default_user),
                         default=CanvasPrep.default_user)
@@ -604,5 +710,7 @@ if __name__ == '__main__':
                host=args.host,
                target_db=args.database,
                tables=args.table,
+               new_only=args.newonly,
+               skip_backups=args.skipbackup,
                logging_level=logging.ERROR if args.quiet else logging.INFO  
-               )
+               ).run()

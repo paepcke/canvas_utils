@@ -1,3 +1,5 @@
+# Total: 1hr and 10min:
+
 DROP TABLE IF EXISTS AssignmentSubmissions;
 CREATE TABLE AssignmentSubmissions (
     account_id bigint,
@@ -130,6 +132,8 @@ UPDATE AssignmentSubmissions
     ON AssignmentSubmissions.assignment_id = canvasdata_prd.assignment_dim.assignment_group_id
   SET AssignmentSubmissions.assignment_name = canvasdata_prd.assignment_dim.title,
       AssignmentSubmissions.assignment_description = canvasdata_prd.assignment_dim.description;
+
+CREATE INDEX usr_id_idx ON AssignmentSubmissions(user_id);
 
 # Add student name:
 UPDATE AssignmentSubmissions

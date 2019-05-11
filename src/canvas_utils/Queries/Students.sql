@@ -17,3 +17,5 @@ SELECT distinct user_id, user_dim.name AS student_name
        ) AS UserIdName
        LEFT JOIN <canvas_db>.user_dim
          ON UserIdName.user_id = user_dim.id;
+
+CREATE INDEX usr_id_idx ON Students(user_id);
