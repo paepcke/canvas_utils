@@ -29,10 +29,10 @@ class CanvasPrep(object):
     '''
 
     # Production server
-    default_host = 'canvasdata-prd-db1.cupga556ks1y.us-west-1.rds.amazonaws.com'
+    # default_host = 'canvasdata-prd-db1.cupga556ks1y.us-west-1.rds.amazonaws.com'
     
     # Kathy server
-    # default_host = 'canvasdata-prd-db1.ci6ilhrc8rxe.us-west-1.rds.amazonaws.com'
+    default_host = 'canvasdata-prd-db1.ci6ilhrc8rxe.us-west-1.rds.amazonaws.com'
     
 
     default_user = 'canvasdata_prd'
