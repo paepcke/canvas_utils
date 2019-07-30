@@ -9,5 +9,4 @@ CREATE TABLE Accounts (
 
 INSERT INTO Accounts
 SELECT id, name
-  FROM <canvas_db>.account_dim;
-
+  FROM canvasdata_prd.account_dim;

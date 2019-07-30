@@ -48,14 +48,14 @@ SELECT account_id,
        NULL AS acad_career,
        NULL AS instructors,
        NULL AS enrollment
- FROM <canvas_db>.account_dim LEFT JOIN <canvas_db>.course_dim
-   ON <canvas_db>.account_dim.id = <canvas_db>.course_dim.account_id;
+ FROM canvasdata_prd.account_dim LEFT JOIN canvasdata_prd.course_dim
+   ON canvasdata_prd.account_dim.id = canvasdata_prd.course_dim.account_id;
 
 # Fill quarter_name (e.g. Fall 2015, Summer 2016),
 # and date_end:
 
 UPDATE Courses
-  LEFT JOIN <canvas_db>.enrollment_term_dim
+  LEFT JOIN canvasdata_prd.enrollment_term_dim
    ON Courses.enrollment_term_id = id
   SET quarter_name_canvas = name,
       Courses.date_end    = enrollment_term_dim.date_end;
@@ -63,7 +63,7 @@ UPDATE Courses
 # Fill in account_name:
 
 UPDATE Courses
-  LEFT JOIN <canvas_db>.account_dim
+  LEFT JOIN canvasdata_prd.account_dim
    ON account_id = id
   SET account_name = name;
 
@@ -88,7 +88,7 @@ UPDATE Courses
   LEFT JOIN
        (SELECT course_id,
               COUNT(course_id) AS enrollment
-         FROM Courses LEFT JOIN <canvas_db>.enrollment_dim
+         FROM Courses LEFT JOIN canvasdata_prd.enrollment_dim
             USING(course_id)
           GROUP BY course_id
        ) AS EnrlRes

@@ -17,8 +17,8 @@ from canvas_prep import CanvasPrep
 # The following is abandoned for now:
 #from copy_aux_tables import AuxTableCopier
 
-#*****TEST_ALL = True
-TEST_ALL = False
+TEST_ALL = True
+#TEST_ALL = False
 
 class CanvasUtilsTests(unittest.TestCase):
 
@@ -131,7 +131,8 @@ class CanvasUtilsTests(unittest.TestCase):
     # testSaveTables
     #-------------------    
     
-    @unittest.skipIf(not TEST_ALL, 'Temporarily skipped')    
+    #*****@unittest.skipIf(not TEST_ALL, 'Temporarily skipped')    
+    @unittest.skip('Temporarily skipped')    
     def testSaveTables(self):
 
         try:
@@ -309,7 +310,8 @@ class CanvasUtilsTests(unittest.TestCase):
     # testRestoreFromBackup 
     #-------------------    
             
-    @unittest.skipIf(not TEST_ALL, 'Temporarily skipped')
+    #*****@unittest.skipIf(not TEST_ALL, 'Temporarily skipped')
+    @unittest.skip('Temporarily skipped')
     def testRestoreFromBackup(self):
         
         db_schema = CanvasUtilsTests.unittests_db_nm

@@ -9,6 +9,6 @@ CREATE TABLE Terms (
 
 INSERT INTO Terms
 SELECT DISTINCT id, name, date_start
-  FROM <canvas_db>.enrollment_term_dim;
+  FROM canvasdata_prd.enrollment_term_dim;
 
 CREATE INDEX trm_id_idx ON Terms(term_id);

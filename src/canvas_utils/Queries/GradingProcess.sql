@@ -54,7 +54,7 @@ SELECT CourseAssignments.account_id,
 
 -- # CourseAssignments:
 
--- #mysql -u <canvas_db> -p -h canvasdata-prd-db1.ci6ilhrc8rxe.us-west-1.rds.amazonaws.com Andreas -N -B -e \
+-- #mysql -u canvasdata_prd -p -h canvasdata-prd-db1.ci6ilhrc8rxe.us-west-1.rds.amazonaws.com Andreas -N -B -e \
 -- SELECT 'account_id','course_id','course_name','term_name','assignment_id','assignment_group_id',
 --        'assignment_name','submission_types','points_possible','grading_type','assignment_state',
 --        'workflow_state','due_date','group_assignment_name','group_assignment_weight',
@@ -66,7 +66,7 @@ SELECT CourseAssignments.account_id,
 
 -- # AssignmentSubmissions
 
--- #mysql -u <canvas_db> -p -h canvasdata-prd-db1.ci6ilhrc8rxe.us-west-1.rds.amazonaws.com Andreas -N -B -e \
+-- #mysql -u canvasdata_prd -p -h canvasdata-prd-db1.ci6ilhrc8rxe.us-west-1.rds.amazonaws.com Andreas -N -B -e \
 -- SELECT 'account_id','course_id','course_name','term_name','submission_id',
 --        'assignment_id','assignment_name','assignment_description','quiz_submission_id',
 --        'grader_id','user_id','enrollment_term_id','assignment_group_id',
@@ -79,7 +79,7 @@ SELECT CourseAssignments.account_id,
 
 -- # Grading process:
 
--- # mysql -u <canvas_db> -p -h canvasdata-prd-db1.ci6ilhrc8rxe.us-west-1.rds.amazonaws.com Andreas -N -B -e \
+-- # mysql -u canvasdata_prd -p -h canvasdata-prd-db1.ci6ilhrc8rxe.us-west-1.rds.amazonaws.com Andreas -N -B -e \
 -- SELECT 'reaccount_id','course_id','course_name','enrollment_term_id','grader_id',
 --        'assignment_id','submission_id','user_id','grade_letter','grade_numeric',
 --        'grading_type','grade_state','group_assignment_final_score',

@@ -23,40 +23,40 @@ CREATE TABLE DiscussionTopics (
 # 2min:
 INSERT INTO DiscussionTopics
     SELECT
-           <canvas_db>.discussion_topic_dim.id AS disc_topic_id,
+           canvasdata_prd.discussion_topic_dim.id AS disc_topic_id,
            NULL AS disc_topic_author_id,
            NULL AS disc_topic_author_name,
            NULL AS disc_topic_author_role,
-           <canvas_db>.discussion_topic_dim.title AS disc_topic_title,
-           <canvas_db>.course_dim.enrollment_term_id AS course_enrollment_term_id,
-           <canvas_db>.course_dim.account_id AS course_account_id,
+           canvasdata_prd.discussion_topic_dim.title AS disc_topic_title,
+           canvasdata_prd.course_dim.enrollment_term_id AS course_enrollment_term_id,
+           canvasdata_prd.course_dim.account_id AS course_account_id,
            NULL AS disc_topic_msg_length,
-           <canvas_db>.discussion_topic_dim.posted_at AS disc_topic_posted_at,
-           <canvas_db>.discussion_topic_dim.course_id AS disc_topic_course_id,
-           <canvas_db>.course_dim.name AS disc_topic_course_name,
-           <canvas_db>.course_dim.code AS disc_topic_course_code,
+           canvasdata_prd.discussion_topic_dim.posted_at AS disc_topic_posted_at,
+           canvasdata_prd.discussion_topic_dim.course_id AS disc_topic_course_id,
+           canvasdata_prd.course_dim.name AS disc_topic_course_name,
+           canvasdata_prd.course_dim.code AS disc_topic_course_code,
            NULL AS disc_topic_subj_catnbr,
-           <canvas_db>.course_dim.start_at AS disc_topic_course_start_date,
-           <canvas_db>.discussion_topic_dim.type AS disc_topic_type
-      FROM <canvas_db>.discussion_topic_dim LEFT JOIN <canvas_db>.course_dim
-       ON <canvas_db>.discussion_topic_dim.course_id = <canvas_db>.course_dim.id
-     WHERE <canvas_db>.discussion_topic_dim.workflow_state = 'active';
+           canvasdata_prd.course_dim.start_at AS disc_topic_course_start_date,
+           canvasdata_prd.discussion_topic_dim.type AS disc_topic_type
+      FROM canvasdata_prd.discussion_topic_dim LEFT JOIN canvasdata_prd.course_dim
+       ON canvasdata_prd.discussion_topic_dim.course_id = canvasdata_prd.course_dim.id
+     WHERE canvasdata_prd.discussion_topic_dim.workflow_state = 'active';
 
 # Add author id and message length:
 
 CREATE INDEX top_id_idx ON DiscussionTopics(disc_topic_id);
 
-USE <canvas_db>;
+USE canvasdata_prd;
 CALL createIndexIfNotExists('top_id_top_fact_idx',
                              'discussion_topic_fact',
                              'discussion_topic_id',
                              NULL);
-USE <canvas_aux>;
+USE canvasdata_aux;
 
 # 15sec;
 UPDATE DiscussionTopics
-  LEFT JOIN <canvas_db>.discussion_topic_fact
-    ON DiscussionTopics.disc_topic_id = <canvas_db>.discussion_topic_fact.discussion_topic_id
+  LEFT JOIN canvasdata_prd.discussion_topic_fact
+    ON DiscussionTopics.disc_topic_id = canvasdata_prd.discussion_topic_fact.discussion_topic_id
   SET disc_topic_author_id  = user_id,
       disc_topic_msg_length = message_length;
 

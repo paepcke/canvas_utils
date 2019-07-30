@@ -18,21 +18,21 @@ CREATE TABLE CourseEnrollment (
 
 INSERT INTO CourseEnrollment
 SELECT CrseEnrl.*, NULL AS instructor_team
- FROM (SELECT <canvas_db>.course_dim.id AS course_id,
-              <canvas_db>.course_dim.account_id,
-              <canvas_db>.enrollment_dim.id AS enrollment_id,
-              <canvas_db>.course_dim.enrollment_term_id,
+ FROM (SELECT canvasdata_prd.course_dim.id AS course_id,
+              canvasdata_prd.course_dim.account_id,
+              canvasdata_prd.enrollment_dim.id AS enrollment_id,
+              canvasdata_prd.course_dim.enrollment_term_id,
               NULL AS enrollment_term_name,
-              <canvas_db>.course_dim.name AS course_name,
-              <canvas_db>.course_dim.code AS course_code,
-              <canvas_db>.course_dim.start_at,
-              <canvas_db>.enrollment_dim.type AS enrollment_type,
-              <canvas_db>.enrollment_dim.user_id
-         FROM <canvas_db>.course_dim LEFT JOIN <canvas_db>.enrollment_dim
-           ON <canvas_db>.course_dim.id = <canvas_db>.enrollment_dim.course_id
-        WHERE <canvas_db>.course_dim.workflow_state = 'available'
-          AND <canvas_db>.enrollment_dim.workflow_state = 'active'
-          AND <canvas_db>.course_dim.enrollment_term_id not in
+              canvasdata_prd.course_dim.name AS course_name,
+              canvasdata_prd.course_dim.code AS course_code,
+              canvasdata_prd.course_dim.start_at,
+              canvasdata_prd.enrollment_dim.type AS enrollment_type,
+              canvasdata_prd.enrollment_dim.user_id
+         FROM canvasdata_prd.course_dim LEFT JOIN canvasdata_prd.enrollment_dim
+           ON canvasdata_prd.course_dim.id = canvasdata_prd.enrollment_dim.course_id
+        WHERE canvasdata_prd.course_dim.workflow_state = 'available'
+          AND canvasdata_prd.enrollment_dim.workflow_state = 'active'
+          AND canvasdata_prd.course_dim.enrollment_term_id not in
            ('35910000000000004','35910000000000003','35910000000000025','35910000000000001')
       ) AS CrseEnrl;
 

@@ -28,7 +28,7 @@ CREATE TABLE AssignmentSubmissions (
 # <end_creation>
 
 
-USE <canvas_db>;
+USE canvasdata_prd;
 CALL createIndexIfNotExists('assIdIndx',
                              'submission_fact',
                              'assignment_id',
@@ -39,7 +39,7 @@ CALL createIndexIfNotExists('enr_term_id_idx',
                              'submission_fact',
                              'enrollment_term_id',
                              NULL);
-USE <canvas_aux>;
+USE canvasdata_aux;
 
 
 # 3min:
@@ -66,10 +66,10 @@ SELECT
     submission_dim.grade_state,
     submission_dim.excused,
     NULL AS student_name
- FROM <canvas_db>.submission_dim
-  LEFT JOIN <canvas_db>.submission_fact
-  ON <canvas_db>.submission_fact.submission_id = <canvas_db>.submission_dim.id
- AND <canvas_db>.submission_fact.assignment_id = <canvas_db>.submission_dim.assignment_id
+ FROM canvasdata_prd.submission_dim
+  LEFT JOIN canvasdata_prd.submission_fact
+  ON canvasdata_prd.submission_fact.submission_id = canvasdata_prd.submission_dim.id
+ AND canvasdata_prd.submission_fact.assignment_id = canvasdata_prd.submission_dim.assignment_id
  WHERE enrollment_term_id NOT IN (
        '35910000000000001',
        '35910000000000003',
@@ -88,10 +88,10 @@ CALL createIndexIfNotExists('crs_id_idx',
                             NULL);
 # Fill in the course name:
 UPDATE AssignmentSubmissions
-  LEFT JOIN <canvas_db>.course_dim
-    ON AssignmentSubmissions.enrollment_term_id = <canvas_db>.course_dim.enrollment_term_id
+  LEFT JOIN canvasdata_prd.course_dim
+    ON AssignmentSubmissions.enrollment_term_id = canvasdata_prd.course_dim.enrollment_term_id
    AND course_id = id
-  SET AssignmentSubmissions.course_name = <canvas_db>.course_dim.name;
+  SET AssignmentSubmissions.course_name = canvasdata_prd.course_dim.name;
 
 # ~1min:
 CALL createIndexIfNotExists('ass_id',
@@ -99,7 +99,7 @@ CALL createIndexIfNotExists('ass_id',
                             'assignment_id',
                              NULL);
 
-USE <canvas_db>;
+USE canvasdata_prd;
 CALL createIndexIfNotExists('ass_id_idx',
                              'assignment_fact',
                              'assignment_id',
@@ -109,13 +109,13 @@ CALL createIndexIfNotExists('crs_id_idx',
                              'assignment_fact',
                              'course_id',
                              NULL);
-USE <canvas_aux>;
+USE canvasdata_aux;
 
 # Fill in the points_possible. 1.5min:
 UPDATE AssignmentSubmissions
-  LEFT JOIN <canvas_db>.assignment_fact
+  LEFT JOIN canvasdata_prd.assignment_fact
     USING(assignment_id, course_id)
-  SET AssignmentSubmissions.points_possible = <canvas_db>.assignment_fact.points_possible;
+  SET AssignmentSubmissions.points_possible = canvasdata_prd.assignment_fact.points_possible;
 
 # Add term name:
 
@@ -128,10 +128,10 @@ UPDATE AssignmentSubmissions
 # Add Assignment Title and description:
 # 2.5 min:
 UPDATE AssignmentSubmissions
-  LEFT JOIN <canvas_db>.assignment_dim
-    ON AssignmentSubmissions.assignment_id = <canvas_db>.assignment_dim.assignment_group_id
-  SET AssignmentSubmissions.assignment_name = <canvas_db>.assignment_dim.title,
-      AssignmentSubmissions.assignment_description = <canvas_db>.assignment_dim.description;
+  LEFT JOIN canvasdata_prd.assignment_dim
+    ON AssignmentSubmissions.assignment_id = canvasdata_prd.assignment_dim.assignment_group_id
+  SET AssignmentSubmissions.assignment_name = canvasdata_prd.assignment_dim.title,
+      AssignmentSubmissions.assignment_description = canvasdata_prd.assignment_dim.description;
 
 CREATE INDEX usr_id_idx ON AssignmentSubmissions(user_id);
 
@@ -139,4 +139,3 @@ CREATE INDEX usr_id_idx ON AssignmentSubmissions(user_id);
 UPDATE AssignmentSubmissions
  LEFT JOIN Students using(user_id)
  SET AssignmentSubmissions.student_name = Students.student_name;
-    

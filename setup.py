@@ -24,7 +24,9 @@ setup(
 
     #dependency_links = ['https://github.com/DmitryUlyanov/Multicore-TSNE/tarball/master#egg=package-1.0']
     # Unit tests; they are initiated via 'python setup.py test'
-    test_suite       = 'nose.collector', 
+    test_suite       = 'nose.collector',
+    #test_suite       = 'tests',
+    tests_require    =['nose'],
 
     # metadata for upload to PyPI
     author = "Andreas Paepcke",

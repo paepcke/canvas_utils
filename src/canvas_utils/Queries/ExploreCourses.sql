@@ -21,7 +21,7 @@ CREATE TABLE ExploreCourses (
 # Pick up the Explore Courses parse of the EC .xml file we did
 # ahead of loading this file:
 
-LOAD DATA LOCAL INFILE '<data_dir>/explore_courses.csv'
+LOAD DATA LOCAL INFILE '/Users/paepcke/EclipseWorkspacesNew/canvas_utils/src/canvas_utils/Data/explore_courses.csv'
  INTO TABLE ExploreCourses
   FIELDS TERMINATED BY "," OPTIONALLY ENCLOSED BY '"' LINES TERMINATED BY '\n'
   IGNORE 1 LINES;

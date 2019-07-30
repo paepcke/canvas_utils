@@ -76,6 +76,7 @@ class MassQueryFinalizer(object):
             # the target directory:
             with open(os.path.join(self.dest_dir, sql_file_name), 'w') as fd:
                 fd.write(resolved_sql)
+                fd.write('\n')
                 
         print("Finalized all queries.")
 

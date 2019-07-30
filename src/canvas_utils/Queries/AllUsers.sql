@@ -22,7 +22,7 @@ INSERT INTO AllUsers
             when type = 'ObserverEnrollment' THEN 'observer'
          END,
          workflow_state
-    FROM <canvas_db>.enrollment_dim;
+    FROM canvasdata_prd.enrollment_dim;
 
 # Add role (TeacherEnrollment, StudentEnrollment, etc.):
 
@@ -30,6 +30,6 @@ CREATE INDEX usr_id_idx ON AllUsers(user_id);
 
 # 50sec:
 UPDATE AllUsers
-  LEFT JOIN <canvas_db>.user_dim
+  LEFT JOIN canvasdata_prd.user_dim
     ON user_id = id
   SET AllUsers.name = user_dim.name;
