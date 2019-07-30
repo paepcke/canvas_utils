@@ -34,5 +34,5 @@ setup(
     description = "Utilities for Canvas mining.",
     license = "BSD",
     keywords = "MySQL",
-    url = "git@github.com:paepcke/canvas_utils.git",   # project home page, if any
+    url = "https://github.com/paepcke/canvas_utils.git",   # project home page, if any
 )

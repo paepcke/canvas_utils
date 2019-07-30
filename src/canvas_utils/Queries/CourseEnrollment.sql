@@ -1,3 +1,5 @@
+use canvasdata_aux;
+
 DROP TABLE IF EXISTS CourseEnrollment;
 CREATE TABLE CourseEnrollment (
     course_id bigint(20),

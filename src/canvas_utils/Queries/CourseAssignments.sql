@@ -1,3 +1,5 @@
+use canvasdata_aux;
+
 DROP TABLE IF EXISTS CourseAssignments;
 CREATE TABLE CourseAssignments (
     account_id bigint,
@@ -46,11 +48,15 @@ FROM canvasdata_prd.assignment_dim
        ON canvasdata_prd.assignment_dim.assignment_group_id = canvasdata_prd.assignment_group_dim.id
       AND canvasdata_prd.assignment_dim.course_id           = canvasdata_prd.assignment_group_dim.course_id;
 
+# 
+CREATE INDEX crs_id_idx on CourseAssignments(course_id);
+
 # Fill in course name:
 UPDATE CourseAssignments
   LEFT JOIN canvasdata_prd.course_dim
     ON id = course_id
- SET course_name = name;
+ SET course_name = name,
+     CourseAssignments.account_id  = course_dim.account_id;
 
 
 CREATE INDEX crs_nm_idx ON CourseAssignments(course_name(40));
@@ -79,7 +85,6 @@ DELETE CourseAssignments
 #     and group_assignment_final_score.
 
 CREATE INDEX ass_grp_id_idx ON CourseAssignments(assignment_group_id);
-CREATE INDEX crs_id_idx ON CourseAssignments(course_id);
 CREATE INDEX ass_state_idx ON CourseAssignments(assignment_state(30));
 
 # Fill in workflow_state. 2min:
@@ -88,15 +93,13 @@ UPDATE CourseAssignments
     ON CourseAssignments.assignment_id = canvasdata_prd.assignment_group_dim.id
   SET CourseAssignments.workflow_state = canvasdata_prd.assignment_group_dim.workflow_state;
 
-# Update assignment_current_score, account_id, and
-# assignment_final_score:
+# Update assignment_current_score and assignment_final_score:
 
 UPDATE CourseAssignments
  LEFT JOIN canvasdata_prd.assignment_group_score_fact
     USING(assignment_group_id, course_id)
  SET CourseAssignments.group_assignment_current_score = canvasdata_prd.assignment_group_score_fact.current_score,
      CourseAssignments.group_assignment_final_score = canvasdata_prd.assignment_group_score_fact.final_score,
-     CourseAssignments.account_id = canvasdata_prd.assignment_group_score_fact.account_id
 WHERE CourseAssignments.assignment_state IN('published','unpublished')
  AND CourseAssignments.workflow_state='available';
 
