@@ -8,6 +8,7 @@ Created on Jan 1, 2019
 import argparse
 import datetime
 import getpass
+import glob
 import logging
 from os import getenv
 import os
@@ -15,6 +16,7 @@ import pickle
 import pwd
 import re
 import sys
+from pathlib import Path
 
 from pymysql_utils.pymysql_utils import MySQLDB
 
@@ -57,27 +59,7 @@ class CanvasPrep(object):
     ec_xml_file = 'Data/explore_courses.xml'
      
     
-    tables = [
-                'Terms',
-                'Accounts',
-                'AllUsers',
-                'Students',
-                'AssignmentSubmissions',
-                'ExploreCourses',
-                'Courses',
-                'CourseAssignments',
-                'Instructors',
-                'CourseInstructor',
-                'CourseInstructorTeams',
-                'CourseEnrollment',
-                'DiscussionTopics',
-                'Graders',
-                'GradingProcess',
-                'RequirementsFill',
-                'StudentUnits',
-                'TeachingAssistants',
-                'DiscussionMessages',
-                ]
+    tables = []
     
     # Paths to the SQL files that do the work.
     # Filled in constructor
@@ -101,7 +83,8 @@ class CanvasPrep(object):
                  host=None,
                  tables=[],
                  new_only=False,
-                 skip_backups=False, 
+                 skip_backups=False,
+                 dryrun=False, 
                  logging_level=logging.INFO):
         '''
         @param user: login user for database
@@ -118,6 +101,8 @@ class CanvasPrep(object):
         @type new_only: bool
         @param skip_backups: if true, don't backup already existing tables before overwriting them
         @type skip_backups: bool
+        @param dryrun: if True, only print what would be done.
+        @type dryrun: bool 
         @param logging_level: how much of the run to document
         @type logging_level: logging.INFO/DEBUG/ERROR/...
         '''
@@ -128,6 +113,7 @@ class CanvasPrep(object):
         
         self.new_only = new_only
         self.skip_backups = skip_backups
+        self.dryrun = dryrun
         if user is None:
             user = CanvasPrep.default_user
             
@@ -142,17 +128,22 @@ class CanvasPrep(object):
         if host is None:
             host = CanvasPrep.default_host
 
+        # Under certain conditions __file__ is a relative path.
+        # Ensure availability of an absolute path:
+        self.curr_dir = os.path.dirname(os.path.realpath(__file__))
+        
         # If user wants only particular tables to be created
         # then the tables arg will be a list of table names:
         if tables is not None and len(tables) > 0:
             CanvasPrep.tables = tables
+        else:
+            # No particular tables named on command line,
+            # So get all .sql file names in Query directory.
+            # Names are the table names.
+            CanvasPrep.create_table_name_array()
 
         self.setup_logging()
         self.logger.setLevel(logging_level)
-        
-        # Under certain conditions __file__ is a relative path.
-        # Ensure availability of an absolute path:
-        self.curr_dir = os.path.dirname(os.path.realpath(__file__))
         
         # Create list of full paths to table
         # creation sql files:
@@ -201,7 +192,11 @@ class CanvasPrep(object):
         #   o we are to overwrite existing tables AND
         #   o we were not instructed to back up tables:
         if len(existing_tables) > 0 and not self.new_only and not self.skip_backups:
-            self.backup_tables(existing_tables) 
+            if self.dryrun:
+                print(f"Would back up tables {existing_tables}")
+            else:
+                # Backup the tables that are in the db:
+                self.backup_tables(existing_tables) 
         
         if self.new_only:
             completed_tables = existing_tables
@@ -213,7 +208,10 @@ class CanvasPrep(object):
         
         # We are supposed to refresh the ExploreCourses table.
         # Get pull a fresh .xml file, and convert it to .csv:
-        self.pull_explore_courses()
+        if self.dryrun:
+            print("Would fetch fresh copy of explore-courses.")
+        else:
+            self.pull_explore_courses()
             
         # Create the other tables that are needed.
         try:
@@ -222,7 +220,10 @@ class CanvasPrep(object):
         finally:
             self.close()
         
-        self.log_info(f"(Re)created {len(completed_tables)} tables. Done")
+        if self.dryrun:
+            print(f"Would be done creating {len(completed_tables)} tables.")
+        else:
+            self.log_info(f"(Re)created {len(completed_tables)} tables. Done")
 
     #------------------------------------
     # close 
@@ -460,11 +461,18 @@ class CanvasPrep(object):
             # the newer finalize_table module.
             # Replace the placeholder <canvas_db> with the
             # db name of the Canvas product db:
-            query = query.replace('<canvas_db>', CanvasPrep.canvas_db_nm)
-            query = query.replace('<canvas_aux>', CanvasPrep.canvas_db_aux)
-            query = query.replace('<data_dir>', os.path.join(self.curr_dir, 'Data'))
+            # [Abandoned using marked up queries as too complex for maintenance]
+            
+            # query = query.replace('<canvas_db>', CanvasPrep.canvas_db_nm)
+            # query = query.replace('<canvas_aux>', CanvasPrep.canvas_db_aux)
+            # query = query.replace('<data_dir>', os.path.join(self.curr_dir, 'Data'))
             
             
+            if self.dryrun:
+                print(f"Would create table {tbl_nm}.")
+                completed_tables.append(tbl_nm)
+                continue
+                      
             self.log_info('Working on table %s...' % tbl_nm)
             (errors, _warns) = self.db.execute(query, doCommit=False)
             if errors is not None:
@@ -675,6 +683,26 @@ class CanvasPrep(object):
         this_dir = self.curr_dir
         return os.path.join(this_dir, 'Queries', tbl_nm) + '.sql'
 
+    #-------------------------
+    # create_table_name_array 
+    #--------------
+    
+    @classmethod
+    def create_table_name_array(cls):
+
+        curr_dir = os.path.dirname(os.path.realpath(__file__))        
+        # Directories where the template files are:
+        query_dir = os.path.join(curr_dir, 'Queries')
+        
+        # List of .sql files to fill in:
+        query_files = glob.glob(os.path.join(query_dir, '*.sql'))
+
+        CanvasPrep.tables = []        
+        for sql_file_path in query_files:
+            # Chop off the '.sql' from the file name
+            table_name = Path(sql_file_path).stem
+            CanvasPrep.tables.append(table_name)
+
     #------------------------------------
     # list_tables 
     #-------------------    
@@ -684,6 +712,10 @@ class CanvasPrep(object):
         '''
         List tables that can be created to screen.
         '''
+        # Fill the tables array with all tables created
+        # in the Queries dir:
+        CanvasPrep.create_table_name_array()
+        
         print("Tables that can be created:")
         for table in CanvasPrep.tables:
             print(f"{table},")
@@ -1078,6 +1110,10 @@ if __name__ == '__main__':
                         action='store_true',
                         default=False);
                         
+    parser.add_argument('-y', '--dryrun',
+                        help='if present, only print what would be done. Default: False',
+                        action='store_true',
+                        default=False);
 
     args = parser.parse_args();
 
@@ -1099,5 +1135,6 @@ if __name__ == '__main__':
                tables=args.table,
                new_only=args.newonly,
                skip_backups=args.skipbackup,
+               dryrun=args.dryrun,
                logging_level=logging.ERROR if args.quiet else logging.INFO  
                ).run()
