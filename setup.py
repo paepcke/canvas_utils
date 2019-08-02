@@ -3,9 +3,8 @@ from setuptools import setup, find_packages
 import os
 import glob
 
-# datafiles = ['src/pathways/courseNameAcademicOrg.csv',
-#              'src/pathways/crsNmDescriptions.csv'
-#              ]
+with open("README.md", "r") as fh:
+    long_description = fh.read()
 
 setup(
     name = "canvas_utils",
@@ -32,6 +31,8 @@ setup(
     author = "Andreas Paepcke",
     author_email = "paepcke@cs.stanford.edu",
     description = "Utilities for Canvas mining.",
+    long_description_content_type = "text/markdown",
+    long_description = long_description,
     license = "BSD",
     keywords = "MySQL",
     url = "https://github.com/paepcke/canvas_utils.git",   # project home page, if any
