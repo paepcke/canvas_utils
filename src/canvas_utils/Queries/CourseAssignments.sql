@@ -54,8 +54,8 @@ SELECT
 FROM canvasdata_prd.assignment_dim
     LEFT JOIN canvasdata_prd.assignment_group_dim
        ON canvasdata_prd.assignment_dim.assignment_group_id = canvasdata_prd.assignment_group_dim.id
-      AND canvasdata_prd.assignment_dim.course_id           = canvasdata_prd.assignment_group_dim.course_id
-      AND canvasdata_prd.assignment_dim.workflow_state      = 'published';
+     WHERE canvasdata_prd.assignment_dim.course_id           = canvasdata_prd.assignment_group_dim.course_id
+       AND canvasdata_prd.assignment_dim.workflow_state      = 'published';
 
 CREATE INDEX crs_id_idx ON CourseAssignments(course_id);
 

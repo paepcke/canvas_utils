@@ -68,9 +68,10 @@ SELECT account_id,
 UPDATE Courses
   LEFT JOIN canvasdata_prd.enrollment_term_dim
    ON Courses.enrollment_term_id = id
+  LEFT JOIN Terms ON canvasdata_prd.enrollment_term_dim.id = Terms.term_id
   SET quarter_name_canvas = name,
       Courses.date_end    = enrollment_term_dim.date_end
- WHERE Terms.term_name NOT IN ('Tester Term', 'Migrated Content', 'Default Term', 'Test Term');      
+ WHERE Terms.term_name NOT IN ('Tester Term', 'Migrated Content', 'Default Term', 'Test Term');
 
 # Fill in account_name:
 
@@ -81,18 +82,19 @@ UPDATE Courses
 
 # All else from ExploreCourses.
 
-UPDATE Courses LEFT JOIN ExploreCourses USING(course_name) SET
-   Courses.acad_year = ExploreCourses.acad_year,
-   Courses.stanford_course_id = ExploreCourses.course_id,
-   Courses.course_code = ExploreCourses.course_code, Courses.subject =
-   ExploreCourses.subject, Courses.units_max =
-   ExploreCourses.units_max, Courses.acad_group =
-   ExploreCourses.acad_group, Courses.department =
-   ExploreCourses.department, Courses.acad_career =
-   ExploreCourses.acad_career, Courses.instructors =
-   ExploreCourses.instructors, Courses.quarter_name_peoplesoft =
-   ExploreCourses.quarter_name, Courses.ger_fulfillment =
-   ExploreCourses.ger_fulfillment;
+# Commented b/c the join is unreliable:
+-- UPDATE Courses LEFT JOIN ExploreCourses USING(course_name) SET
+--    Courses.acad_year = ExploreCourses.acad_year,
+--    Courses.stanford_course_id = ExploreCourses.course_id,
+--    Courses.course_code = ExploreCourses.course_code, Courses.subject =
+--    ExploreCourses.subject, Courses.units_max =
+--    ExploreCourses.units_max, Courses.acad_group =
+--    ExploreCourses.acad_group, Courses.department =
+--    ExploreCourses.department, Courses.acad_career =
+--    ExploreCourses.acad_career, Courses.instructors =
+--    ExploreCourses.instructors, Courses.quarter_name_peoplesoft =
+--    ExploreCourses.quarter_name, Courses.ger_fulfillment =
+--    ExploreCourses.ger_fulfillment;
 
 # Add enrollment:
 
