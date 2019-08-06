@@ -689,6 +689,17 @@ class CanvasPrep(object):
     
     @classmethod
     def create_table_name_array(cls):
+        '''
+        Collect all file names in the Queries subdirectory.
+        Each file name is a table name with '.sql' appended.
+        Chop off that extension to get a table name.
+        
+        Initialize CanvasPrep.tables to be a list of all
+        table names. Also eturn that list.
+        
+        @return: list of tables that are created by .sql files in the Query directory
+        @rtype: [str]
+        '''
 
         curr_dir = os.path.dirname(os.path.realpath(__file__))        
         # Directories where the template files are:
@@ -703,6 +714,8 @@ class CanvasPrep(object):
             table_name = Path(sql_file_path).stem
             CanvasPrep.tables.append(table_name)
 
+        return CanvasPrep.tables
+    
     #------------------------------------
     # list_tables 
     #-------------------    
