@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 '''
 Created on May 1, 2019
 
@@ -5,7 +6,7 @@ Created on May 1, 2019
 '''
 from _collections import OrderedDict
 import argparse
-import collections
+import collections.abc
 import csv
 import getpass
 import logging
@@ -29,11 +30,9 @@ class AuxTableCopier(object):
     default_user = 'canvasdata_prd'
     
     # Host of db where tables are stored:
+                           
+    host = 'canvasdata-prd-db1.ci6ilhrc8rxe.us-west-1.rds.amazonaws.com'
     #host = 'canvasdata-prd-db1.cupga556ks1y.us-west-1.rds.amazonaws.com'
-    host = 'canvasdata-prd-db1.cupga556ks1y.us-west-1.rds.amazonaws.com'
-    
-    # Name of MySQL canvas data schema (db):
-    canvas_db_nm = 'canvasdata_prd'
     
     # Canvas pwd file name:
     canvas_pwd_file = os.path.join(getenv("HOME"), '.ssh', 'canvas_pwd') 
@@ -50,18 +49,22 @@ class AuxTableCopier(object):
 
     def __init__(self, 
                  user=None, 
-                 pwd=None, 
+                 pwd=None,
+                 host=None, 
                  dest_dir='/tmp', 
-                 overwrite_existing=False,
+                 overwrite_existing=True,
                  tables=None,    # Default: all tables are copied 
-                 copy_format='sql', 
-                 logging_level=logging.INFO):
+                 copy_format='csv', 
+                 logging_level=logging.INFO,
+                 unittesting=False):
         '''
         
         @param user: login user for database. Default: AuxTableCopier.default_user  
         @type user: str
         @param pwd: password for database. Default: read from file AuxTableCopier.canvas_pwd_file
         @type pwd:{str | None}
+        @param host: host of the source db. Default: AuxTableCopier.host
+        @type host: str
         @param dest_dir: directory where to place the .sql/.csv files. Default /tmp 
         @type dest_dir: str
         @param overwrite_existing: whether or not to delete files in the target
@@ -73,8 +76,15 @@ class AuxTableCopier(object):
         @type copy_format: {'sql' | 'csv'}
         @param logging_level: how much of the run to document
         @type logging_level: logging.INFO/DEBUG/ERROR/...
+        @param unittesting: set to True to do nothing significant, and let 
+            unittests call methods in isolation.
+        @type unittests.
         '''
-
+        if unittesting:
+            # For unit testing, set the default database to
+            # 'Unittest:
+            AuxTableCopier.canvas_db_aux = 'Unittest'
+        
         self.setup_logging()
         self.logger.setLevel(logging_level)
         
@@ -94,15 +104,28 @@ class AuxTableCopier(object):
             self.dest_dir = dest_dir
             
         if copy_format in ['csv', 'sql']:
-            if copy_format == 'csv':
-                raise NotImplementedError("Copying as CSV is not implemented yet.")
             self.copy_format = copy_format
         else:
             raise ValueError(f"Only copy_format 'csv', and 'sql' are allowed; not {copy_format}")
         self.overwrite_existing = overwrite_existing
         
-        self.host = AuxTableCopier.host
+        if host is None:
+            self.host = AuxTableCopier.host
+        else:
+            self.host = host
+            
+        self.src_db = AuxTableCopier.canvas_db_aux
+        
+        # No schema created yet for this table.
+        # We will create a read-only property
+        # for this quantity: 
+        self.__schema = None
 
+        if unittesting:
+            # Don't do anything big. Allow unittests
+            # to call methods in isolation.
+            return
+        
         # If user wants only particular tables to be copied
         # (subject to overwrite_existing), then the tables arg will be
         # a list of table names. If tables is an empty list,
@@ -125,6 +148,19 @@ class AuxTableCopier(object):
         
         self.completed_tables = self.get_existing_tables(set(tables))
 
+    #-------------------------
+    # PROPERTY: schema 
+    #--------------
+
+    @property
+    def schema(self):
+        # Return this AuxTableCopier's Schema instance.
+        # That instance can be used for getting details
+        # about the table via schema[<col-name>] to get
+        # SchemeColumn instances.
+        
+        return self.__schema
+
     #------------------------------------
     # copy_tables 
     #-------------------    
@@ -138,7 +174,7 @@ class AuxTableCopier(object):
             overwrite_existing = self.overwrite_existing
             
         if overwrite_existing:
-            self.log_info(f"NOTE: copying all tables overwriting those already in {self.dest_dir}.")
+            self.log_info(f"NOTE: will overwrite aux table-related files in {self.dest_dir}.")
         else:
             self.log_info(f"NOTE: only copying tables not already in {self.dest_dir}. Use --all to replace all.")
             
@@ -153,7 +189,8 @@ class AuxTableCopier(object):
             # Ready to copy all:
             tables_to_copy = set(table_names)
         else:
-            tables_to_copy = set(table_names) - existing_tables 
+            tables_to_copy = set(table_names) - existing_tables
+        self.log_info(f'Will copy {len(tables_to_copy)} table(s).') 
             
         table_to_file_map = {table_name : self.file_nm_from_tble(table_name) for table_name in tables_to_copy}
         
@@ -178,7 +215,15 @@ class AuxTableCopier(object):
     #-------------------
     
     def copy_to_sql_files(self, table_to_file_map):
+        '''
+        NOT TESTED or REVIEWED!
         
+        @param table_to_file_map:
+        @type table_to_file_map:
+        '''
+        
+        raise NotImplemented("Only copy_to_csv_files is currently implemented.")
+    
         bash_cmd_template = ['mysqldump', '-u', 'canvasdata_prd', '-p', '<pwd>', '-h', 
                              'canvasdata-prd-db1.cupga556ks1y.us-west-1.rds.amazonaws.com canvasdata_aux',
                              '<tbl_name>', 
@@ -219,27 +264,91 @@ class AuxTableCopier(object):
     # copy_to_csv_files 
     #-------------------    
     
-    #**** To be implemented *******
     def copy_to_csv_files(self, table_names):
-        self.connect_to_src_db(self.user, 
-                               self.host, 
-                               self.pwd, 
-                               self.src_db)
-
-        # Have to get schema for each table to make
-        # the CSV header.
+        '''
+        Copies all table_names tables to the destination
+        directory, including their CREATE TABLE statements.
         
-        table_schemas = [self.populate_table_schema(table_name) for table_name in table_names]
-        for table_schema in table_schema:
-            self.copy_one_table_to_csv(table_schema)
+        @param table_names: names of tables whose contents to pull into dest_dir
+        @type table_names: [str]
+        @return: a CopyResult instance with tables copied, and errors encounetered.
+        @rtype CopyResult
+        '''
+        
+        # In case the connect_to_src_db() call
+        # below fails, ensure that self.db isn't
+        # None in the 'finally' clause:
+        self.db = None
+        try:
+            self.connect_to_src_db(self.user, 
+                                   self.host, 
+                                   self.pwd, 
+                                   self.src_db)
+    
+            # Have to get schema for each table to make
+            # the CSV header.
             
+            table_schemas = [self.populate_table_schema(table_name) for table_name in table_names]
+            for table_schema in table_schemas:
+                table_name = table_schema.table_name
+                self.log_info(f"Copying {table_name} to {self.dest_dir}/{table_name}.csv...")
+                self.copy_one_table_to_csv(table_schema)
+                self.log_info(f"Done copying {table_schema}.{table_name}.")
+
+                self.log_info(f"Writing {table_name}'s schema to {self.dest_dir}/{table_name}_schema.sql")
+                self.write_table_schema(table_schema)
+                self.log_info(f"Done writing {table_name}'s schema to {self.dest_dir}/{table_name}_schema.sql")
+                
+        finally:
+            if self.db is not None:
+                self.db.close()
+        return CopyResult(table_names, None) # No errors reported so far.
+
+    #-------------------------
+    # write_table_schema 
+    #--------------
+    
+    def write_table_schema(self, table_schema):
+        '''
+        Writes a MySQL CREATE TABLE statement to
+        the destination directory. Filename will be
+        the table name with "_schema.sql" appended.
+        
+        @param table_schema: the table's Schema instance
+        @type table_schema: Schema
+        '''
+        table_name = table_schema.table_name
+        dest_file = os.path.join(self.dest_dir, table_name) + '_schema.sql'
+        create_statement = table_schema.construct_create_table()
+        self.log_info(f'Writing schema for table {table_name} to {dest_file}...')
+        with open(dest_file, 'w') as fd:
+            fd.write(create_statement)
+            fd.write('\n')
+        self.log_info(f'Done writing schema for table {table_name} to {dest_file}.')
+            
+        
     #-------------------------
     # copy_one_table_to_csv 
     #--------------
             
-    def copy_one_table_to_csv(self, table_schema):
+    def copy_one_table_to_csv(self, table_schema=None):
+        '''
+        Copy the table that populates the current
+        schema to <self.dest_dir>/<table_name>
         
-      
+        Assume that self.schema contains a schema
+        as a result of calling populate_table_schema()
+        
+        To copy another file, call populate_table_schema()
+        again with a different table name, and then call
+        this method again.
+
+        '''
+        
+        if table_schema is None:
+            # Use the schema that is currently populated:
+            table_schema = self.schema
+                  
         table_name   = table_schema.table_name
         file_name    = os.path.join(self.dest_dir, table_name) + '.csv'
         
@@ -247,66 +356,84 @@ class AuxTableCopier(object):
         # The csv writer will add quotes around the col names:
         col_name_arr = table_schema.col_names(quoted=False)
         
+        rows_retrieve_stmt = f'''select *
+                                   from {table_name};
+                                '''
+
+                                 
+        row_iterator = self.db.query(rows_retrieve_stmt)
+        
         with open(file_name, 'w') as fd:
-            csv_writer = csv.writer(file_name, delimiter=',')
+            csv_writer = csv.writer(fd, delimiter=',')
             # Write header line:
             csv_writer.writerow(col_name_arr)
+            for row in row_iterator:
+                csv_writer.writerow(row)
             
-
     #-------------------------
     # populate_table_schema 
     #--------------
     
     def populate_table_schema(self, table_name):
         '''
-        Return an SQL table create statement for the
-        given table.
+        Return a Schema instance that reflects the 
+        table whose name is passed in.
         
         Assumption: self.db holds a MySQLDB instance.
         I.e. connect_to_src_db() has been called.
         
         @param table_name: aux table name whose creation SQL is to be produced
         @type table_name: str
-        @return: an SQL statement that would create the table in an Oracle database
-        @rtype: str
+        @return: a Schema instance that describes the table
+        @rtype: Schema
         @raise RuntimeErrer: when MySQL database cannot be contacted. 
         '''
-        
-        table_metadata_cmd = f'''SELECT column_name, data_type, column_default, ordinal_position 
-                                   FROM information_schema.columns 
+        table_metadata_cmd = f'''SELECT column_name, data_type, column_default, ordinal_position, extra 
+                                   FROM information_schema.COLUMNS 
                                   WHERE table_schema = '{AuxTableCopier.canvas_db_aux}' 
                                     AND table_name = '{table_name}';
                             '''
         schema_obj = Schema(table_name)
         
         table_metadata = self.db.query(table_metadata_cmd)
-        for (col_name, col_type, col_default, position) in table_metadata:
+        for (col_name, col_type, col_default, position, is_auto_increment) in table_metadata:
             # Add info about one column to this schema:
-            schema_obj.push(col_name, col_type, col_default, position)
+            schema_obj.push(col_name, 
+                            col_type, 
+                            col_default, 
+                            position, 
+                            col_is_auto_increment=(True if is_auto_increment.lower()=='auto_increment' else False))
     
         # For each column (i.e. SchemaColumn instance): if the col has 
         # an index, create SchemaIndex that defines the schema, and add 
         # it as the 'index' property to the SchemaColumn.
+        # The 'sub_part' column is an the length of the index.
+        # The data types 'text' and 'blob' require specifying a
+        # length if an index is built on them.
         
-        index_metadata_cmd = f'''SELECT index_name, column_name, seq_in_index
+        index_metadata_cmd = f'''SELECT index_name, column_name, seq_in_index, sub_part
                                    FROM information_schema.statistics
                                   WHERE TABLE_SCHEMA = '{AuxTableCopier.canvas_db_aux}'
                                     AND TABLE_NAME   = '{table_name}';  
                               '''
         idx_info = self.db.query(index_metadata_cmd)
         
-        for (index_name, col_name, seq_in_index) in idx_info:
+        for (index_name, col_name, seq_in_index, index_length) in idx_info:
             
             schema_col_obj = schema_obj[col_name]
-            schema_idx_obj = SchemaIndex(index_name, col_name, seq_in_index)
+            schema_idx_obj = SchemaIndex(index_name, col_name, seq_in_index, index_length)
             schema_col_obj.index = schema_idx_obj
+            
+        self.__schema = schema_obj
+        return schema_obj
     
     #------------------------------------
     # connect_to_src_db 
     #-------------------
     
     def connect_to_src_db(self, user, host, pwd, src_db):
-        
+    
+        pwd = self.get_db_pwd()    
         self.log_info(f'Connecting to db {user}@{host}:{src_db}...')
                        
         try:
@@ -319,6 +446,22 @@ class AuxTableCopier(object):
         self.log_info('Done connecting to db.')
         
         return self.db
+         
+    #-------------------------
+    # close 
+    #--------------
+         
+    def close(self):
+        '''
+        Release resources.
+        '''
+        self.log_info(f'Closing db at {self.host}...')
+        try:
+            self.db.close()
+        except AttributeError:
+            # Called before self.db was initialized
+            pass
+        self.log_info(f'Done closing db at {self.host}.')
          
     #------------------------------------
     # tables_to_copy 
@@ -369,7 +512,7 @@ class AuxTableCopier(object):
           
         # Get a list of *.sql files in the destination dir.
         # os.path.splittext(path) returns tuple: (front-part, extension with .)
-        # '/tmp/trash.txt' ==> ('/tmp/trash', '.txt'):
+        # '/tmp/trash.txt' ==> ('/tmp/trash', '.txt') ==> trash:
         files_in_dir = [os.path.basename(one_file) for one_file in os.listdir(dest_dir) if os.path.splitext(one_file)[1] == file_ext]
         
         # Chop off the .sql or .csv extension from each file,
@@ -471,7 +614,7 @@ class CopyResult(object):
     
 # ------------------------------------------------  Class Schema -----------------------
     
-class Schema(collections.MutableMapping):
+class Schema(collections.abc.MutableMapping):
     '''
     Instances hold information about one table schema.
     Behaves like an ordered dict. Keys are column names,
@@ -497,8 +640,6 @@ class Schema(collections.MutableMapping):
         my_idx.col_name
         my_idx.seq_in_index  # Position of col in composite
                              # indexes: create index on Foo(col1,col2)
-        
-     
     '''
 
     #-------------------------
@@ -507,11 +648,18 @@ class Schema(collections.MutableMapping):
     
     def __init__(self, table_name, *args, **kwargs):
         
-        self.table_name  = table_name
+        self.__table_name  = table_name
         self.column_dict = OrderedDict()
         
         self.update(dict(*args, **kwargs))
         
+    #-------------------------
+    # table_name 
+    #--------------
+    
+    @property
+    def table_name(self):
+        return self.__table_name
     
     #-------------------------
     # push 
@@ -519,8 +667,9 @@ class Schema(collections.MutableMapping):
     
     def push(self, col_name, 
                    col_type, 
-                   col_default,
-                   col_position, 
+                   col_default=None,
+                   col_position=None,
+                   col_is_auto_increment=False
                    ):
         '''
         Add information about one column. All information is
@@ -537,15 +686,28 @@ class Schema(collections.MutableMapping):
         @type col_default: str
         @param col_position: position of the column in the CREATE TABLE statement
         @type col_position: int
+        @param col_is_auto_increment: True if this column is auto_increment.
+        @type col_is_auto_increment: bool
         '''
-        
-        self.column_dict[col_name] = SchemaColumn(col_name, col_type, col_default, col_position)
+        # Need to ensure that col position is defined,
+        # because that attr is used to sort col defs in
+        # generated CREATE TABLE statements:
+        num_cols = len(self.column_dict)
+        if col_position is None:
+            col_position = num_cols + 1
+        # If we are inserting a col, rather than just appending,
+        # renumber cols after the inserting point:
+        if col_position < num_cols + 1:
+            for col_obj in self.column_dict.values():
+                if col_obj.col_position >= col_position:
+                    col_obj.col_position += 1 
+        self.column_dict[col_name] = SchemaColumn(col_name, col_type, col_default, col_position, col_is_auto_increment)
     
     #-------------------------
     # add_index 
     #--------------
     
-    def add_index(self, index_name, col_name, seq_in_index=1):
+    def add_index(self, index_name, col_name, seq_in_index=1, index_length=None):
         '''
         Add one index to this column instance. The seq_in_index
         parameter is relevant only for composite indexes:
@@ -558,13 +720,16 @@ class Schema(collections.MutableMapping):
         @param index_name: name of the index as in the CREATE INDEX statement
         @type index_name: str
         @param col_name: name of column on which the index is defined
+        @type col_name:
         @type str
         @param seq_in_index: the position the column has in the index
         @type seq_in_index: int
+        @param index_length: length of index in case of 'text' or 'blob' col
+        @type index_length: int
         '''
         
-        index_obj = SchemaIndex(index_name, col_name, seq_in_index)
-        self.column_dict[col_name].indexes = index_obj
+        index_obj = SchemaIndex(index_name, col_name, seq_in_index, index_length)
+        self.column_dict[col_name].index = index_obj
 
     #-------------------------
     # col_names 
@@ -577,19 +742,26 @@ class Schema(collections.MutableMapping):
         they appeared in the table's original CREATE TABLE
         statement.
         
+        Output example with quoted == True:  ['"foo"','"bar"']
+                            quoted == False: ['foo','bar']
+        
         @param quoted: if True, each column name in the returned array will
             have a double quote char around it. 
         @type quoted: boolean
         @return: sorted list of column names; quoted or unquoted
         @rtype: [str]
         '''
-        attr_getter = lambda col_obj: col_obj.position
-        col_objs = self.column_dict.values()
-        sorted_col_objs = col_objs.sort(key=attr_getter)
+        attr_getter = lambda col_obj: col_obj.col_position
+        # dict.values() returns a special odict_list structure.
+        # Must turn that into a normal array; therefore the 'list()':
+        col_objs = list(self.column_dict.values())
+        # Sort the col objs in place to mirror their 
+        # position in the create table statement: 
+        col_objs.sort(key=attr_getter)
         if quoted:
-            res = [f'"{col_obj.col_name}"' for col_obj in sorted_col_objs]
+            res = [f'"{col_obj.col_name}"' for col_obj in col_objs]
         else:
-            res = [f'{col_obj.col_name}' for col_obj in sorted_col_objs]
+            res = [f'{col_obj.col_name}' for col_obj in col_objs]
             
         return res
 
@@ -624,16 +796,24 @@ class Schema(collections.MutableMapping):
         # in the array. Indexes on just one column will have
         # single index obj in the array:  
         
-        index_objs = {}
+        index_objs = OrderedDict()
         
         # Function for sorting a list of index objects by 
         # their seq_in_index property:
-        attr_getter = lambda idx_obj: idx_obj.seq_in_index
-    
+        attr_getter = lambda col_obj: col_obj.col_position
+        col_objs = list(self.column_dict.values())
+        col_objs.sort(key=attr_getter)
         
-        for schema_col_obj in self.column_dict.values():
+        for schema_col_obj in col_objs:
             # Add one line to the CREATE TABLE stmt for this column:
-            create_stmt += f"{schema_col_obj.col_name}  {schema_col_obj.col_type},\n"
+            if schema_col_obj.col_default is None:
+                create_stmt += f"\t{schema_col_obj.col_name}  {schema_col_obj.col_type}"
+            else:
+                create_stmt += f"\t{schema_col_obj.col_name}  {schema_col_obj.col_type} DEFAULT {schema_col_obj.col_default}"
+            if schema_col_obj.col_is_auto_increment:
+                create_stmt += ' AUTO_INCREMENT'
+            # Close this col def line:
+            create_stmt += ',\n'
             if schema_col_obj.index is not None:
                 # Get this column's index obj:
                 idx_obj = schema_col_obj.index
@@ -642,43 +822,87 @@ class Schema(collections.MutableMapping):
                     # index objs with the same name:
                     index_objs[idx_obj.idx_name].append(idx_obj)
                 except KeyError:
+                    # Was first index:
                     index_objs[idx_obj.idx_name] = [idx_obj]
-                
+        
+        create_stmt = self._add_indexes_to_create_statement(create_stmt, index_objs)
+        # Replace the trailing comma with a closing paren and semicolon:
+        # The -2 skips over the already placed \n to the comma:
+        create_stmt = create_stmt[:-2] + ');'
+        
+        return create_stmt
+
+    #-------------------------
+    # _add_indexes_to_create_statement 
+    #--------------
+    
+    def _add_indexes_to_create_statement(self, statement_so_far, index_objs):
+        '''
+        Given the column definitions part of a CREATE TABLE
+        statement, add the indexes. Ex.:
+           --------------- 
+            CREATE TABLE Unittest (
+              id int NOT NULL AUTO_INCREMENT,
+              var1 int,
+              var2 int DEFAULT 10,
+              var3 varchar(40) DEFAULT NULL,
+           ---------------- The text above is passed in
+           The following is added in this method:
+              PRIMARY KEY (id),
+              KEY var3_idx (var3),
+              KEY var1_2_idx (var1,var2);        
+        
+        @param statement_so_far: partially constructed CREATE TABLE statement
+        @type statement_so_far: str
+        @param index_objs: dict of index name ===> list index objects
+        @type index_objs: {str : [SchemaIndex]}
+        '''
+        
+        if len(index_objs) == 0:
+            return(statement_so_far)
+              
+        create_stmt = statement_so_far
+        # Function to fetch one Index sequence position:
+        attr_getter = lambda idx_obj: idx_obj.seq_in_index
+        
         # Go through the indexes we might have found for some
         # of the columns, and add them to the end of the create stmt.
+        # the SchemaIndex instances list for each index name
+        # may be longer than 1, in which case we have a composite index: 
         
         for idx_obj_array in index_objs.values():
-            
-            if idx_obj.idx_name == 'PRIMARY':
-                create_stmt += f"PRIMARY KEY ("
-            else:
-                create_stmt += f"KEY {idx_obj.idx_name} ("
-            
-            # Each entry is an array of SchemaIndex objs. If
-            # that array has more than one element, the index
-            # is composite. Else it is simple:
-            
-            if len(idx_obj_array) == 1:
-                idx_obj = idx_obj_array[0]
-                # Simple case: index is not a composite:
-                    create_stmt += f"({idx_obj.col_name}),\n"
-                # next array of indexes: 
-                continue
-            
-            # Composite index. Sort the array by seq_in_index to
-            # correctly get the order of the columns that participate
-            # in the index composite. I.e. add the "(var1, var2)":
-            
-            sorted_indexes = idx_obj_array.sort(key=attr_getter)
-            for index_obj in sorted_indexes:
-                create_stmt += f"{index_obj.col_name},"
-            # Now that all columns are listed, replace the last comma
-            # with a closed paren:
-            create_stmt = create_stmt[:-1] + '),'
-        
-        # Replace the trailing comma with a closing paren and semicolon:
-        create_stmt = create_stmt[:-1] + ');'
-        
+
+            # If this is a composite index, there will
+            # be more than one index obj. Sort those 
+            # by their position in the composite.
+            # See var_1_2_idx in header example:
+              
+            idx_obj_array.sort(key=attr_getter)
+            wrote_key_name = False
+            for idx_obj in idx_obj_array:
+                if not wrote_key_name:
+                    # The part "...PRIMARY KEY ("
+                    # Or "KEY ...tbl_col_idx (": 
+                    if idx_obj.idx_name.upper() == 'PRIMARY':
+                        create_stmt += f"\tPRIMARY KEY ("
+                    else:
+                        create_stmt += f"\tKEY {idx_obj.idx_name} ("
+                    wrote_key_name = True
+                create_stmt += f"{idx_obj.col_name}"
+                # If there is an index length (as will be for 'test' and
+                # 'blob' cols, then add "(<length>)" after the col name now:
+                if idx_obj.index_length is not None:
+                    create_stmt += f"({idx_obj.index_length}),"
+                else:
+                    create_stmt += f","
+                
+            # Close this index decl: add '),\n to 
+            # "KEY foo_idx (col1,...coln,"
+            # Replace the last comma with '),\n':
+            create_stmt = create_stmt[:-1] + '),\n'
+        # Chop off the '\n', and replace with closing
+        # paren and NL:
+        create_stmt = create_stmt[:-3] + '),\n'
         return create_stmt
     
     #-------------------------
@@ -705,55 +929,79 @@ class Schema(collections.MutableMapping):
 
 class SchemaColumn(object):
     
-    def __init__(self, col_name, col_type, position):
-        self.col_name = col_name
-        self.col_type = col_type
-        self.position = position
-        self.index    = None
-        
+    def __init__(self, col_name, col_type, col_default, position, is_auto_increment):
+        self.__col_name     = col_name
+        self.__col_type     = col_type
+        self.__col_default  = col_default
+        self.__col_position = position
+        self.__is_auto_increment = is_auto_increment
+        self.__index        = None
+
+    def __str__(self):
+        return f"<column {self.col_name} pos {self.col_position}>"
+                
     @property
     def col_name(self):
-        return self.col_name
+        return self.__col_name
     
     @property
     def col_type(self):
-        return self.col_type
+        return self.__col_type
         
     @property
-    def position(self):
-        return self.position
+    def col_position(self):
+        return self.__col_position
+
+    @col_position.setter
+    def col_position(self, new_val):
+        self.__col_position = new_val
 
     @property
+    def col_default(self):
+        return self.__col_default
+
+    @property
+    def col_is_auto_increment(self):
+        return self.__is_auto_increment
+    
+    @property
     def index(self):
-        return self.index
+        return self.__index
     
     @index.setter
     def index(self, schemaIndex_instance):
         if not isinstance(schemaIndex_instance, SchemaIndex):
             raise TypeError("The index information in SchemaColumn instances must be a SchemaIndex instance.")
-        self.index = schemaIndex_instance
+        self.__index = schemaIndex_instance
 
         
 # -------------------------- SchemaIndex Class ---------------------        
             
 class SchemaIndex(object):
     
-    def __init__(self, idx_name, col_name, seq_in_index):
-        self.idx_name = idx_name
-        self.col_name = col_name
-        self.seq_in_index = seq_in_index
-        
+    def __init__(self, idx_name, col_name, seq_in_index, index_length):
+        self._idx_name = idx_name
+        self._col_name = col_name
+        self._seq_in_index = seq_in_index
+        self._idx_length = index_length
+    
+    def __str__(self):
+        return(f"<{self.idx_name} on {self.col_name} pos {self.seq_in_index}>")
     @property
     def idx_name(self):
-        return self.idx_name
+        return self._idx_name
     
     @property
     def col_name(self):
-        return self.col_name
+        return self._col_name
     
     @property
     def seq_in_index(self):
-        return self.seq_in_index
+        return self._seq_in_index
+
+    @property
+    def index_length(self):
+        return self._idx_length
             
             
 
@@ -761,19 +1009,13 @@ class SchemaIndex(object):
 # --------------------------- Main ------------------        
 if __name__ == '__main__':
     
-    copier = AuxTableCopier(tables=['Terms'])
-    copy_result = copier.copy_tables()
-    print(copy_result.completed_tables)
-    print(copy_result.errors)
-    
-    
     parser = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),
                                      formatter_class=argparse.RawTextHelpFormatter,
-                                     description="Create auxiliary canvas tables."
+                                     description="Copy one of more auxiliary tables from AWS production to /tmp/<TableName>.csv"
                                      )
 
     parser.add_argument('-u', '--user',
-                        help='user name for logging into the canvas database. Default: {}'.format(AuxTableCopier.default_user),
+                        help=f'user name for logging into the canvas database.',
                         default=AuxTableCopier.default_user)
                         
     parser.add_argument('-p', '--password',
@@ -782,12 +1024,42 @@ if __name__ == '__main__':
                         default=None)
                         
     parser.add_argument('-o', '--host',
-                        help='host name or ip of database. Default: Canvas production database.',
-                        default='canvasdata-prd-db1.cupga556ks1y.us-west-1.rds.amazonaws.com')
+                        help='host name or ip of database.',
+                        default=f'{AuxTableCopier.host}')
                         
+    parser.add_argument('-d', '--destdir',
+                        help='directory where tables will be deposited locally',
+                        default=f'/tmp')
+                        
+    parser.add_argument('-f', '--format',
+                        choices=['csv'],
+                        help='format for local file.',
+                        default='csv')
+    
+    parser.add_argument('-r', '--remove',
+                        help='if set, remove already locally existing files. Default: do remove existing files',
+                        action='store_true',
+                        default=True)
+
     parser.add_argument('-t', '--table',
                         nargs='+',
-                        help='Name of specific table to create (subject to --all arg); option can be repeated.',
+                        help='Name of specific table to create. Can be repeated if more than one table; default: all tables in aux',
                         default=[]
                         )
+    
+    args = parser.parse_args()
+        
+    # copier = AuxTableCopier(tables=['Terms'])
+    copier = AuxTableCopier(user=args.user,
+                            pwd=args.password,
+                            host=args.host,
+                            dest_dir=args.destdir,
+                            tables=args.table,
+                            copy_format=args.format,
+                            overwrite_existing=args.remove    
+                            )
+
+    copy_result = copier.copy_tables()
+    
+    
         
