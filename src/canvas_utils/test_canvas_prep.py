@@ -10,6 +10,8 @@ import re
 import time
 import unittest
 
+import shutil
+
 from canvas_prep import CanvasPrep
 
 
@@ -27,7 +29,15 @@ class CanvasUtilsTests(unittest.TestCase):
         super(CanvasUtilsTests, cls).setUpClass()
         
         # Read config file to see which MySQL server test_host we should
-        # run the tests on:
+        # run the tests on. If setup.py does not exist, copy
+        # setupSample.py to setup.py:
+        
+        conf_file_dir  = os.path.join(os.path.dirname(__file__), '../../')
+        conf_file_path = os.path.join(conf_file_dir, 'setup.cfg')
+        if not os.path.exists(conf_file_path):
+            shutil.copyfile(os.path.join(conf_file_dir, 'setupSample.cfg'),
+                            os.path.join(conf_file_dir, 'setup.cfg'))        
+        
         config = configparser.ConfigParser()
         config.read(os.path.join(os.path.dirname(__file__), '../../setup.cfg'))
         test_host       = cls.test_host = config['TESTMACHINE']['mysql_host']
