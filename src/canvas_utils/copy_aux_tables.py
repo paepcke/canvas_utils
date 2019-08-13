@@ -56,7 +56,7 @@ class AuxTableCopier(object):
                  tables=None,    # Default: all tables are copied 
                  copy_format='csv', 
                  logging_level=logging.INFO,
-                 unittesting=False):
+                 unittests=False):
         '''
         
         @param user: login user for database. Default: AuxTableCopier.default_user  
@@ -76,13 +76,14 @@ class AuxTableCopier(object):
         @type copy_format: {'sql' | 'csv'}
         @param logging_level: how much of the run to document
         @type logging_level: logging.INFO/DEBUG/ERROR/...
-        @param unittesting: set to True to do nothing significant, and let 
+        @param unittests: set to True to do nothing significant, and let 
             unittests call methods in isolation.
         @type unittests.
         '''
-        if unittesting:
-            # For unit testing, set the default database to
-            # 'Unittest:
+        if unittests and host == 'localhost':
+            # Running unittests on localhost. We stipulate
+            # that a db 'Unittest' exists to which user
+            # unittest has permissions:
             AuxTableCopier.canvas_db_aux = 'Unittest'
         
         self.setup_logging()
@@ -116,13 +117,28 @@ class AuxTableCopier(object):
             
         self.src_db = AuxTableCopier.canvas_db_aux
         
+        # The db obj:
+        self.db = None
+        
         # No schema created yet for this table.
         # We will create a read-only property
         # for this quantity: 
         self.__schema = None
 
-        if unittesting:
-            # Don't do anything big. Allow unittests
+        if unittests:
+            
+            # In case the connect_to_src_db() call
+            # below fails, ensure that self.db isn't
+            # None in the 'finally' clause:
+            
+            self.pwd = self.get_db_pwd()
+            self.db = None
+            self.connect_to_src_db(self.user, 
+                                       self.host, 
+                                       self.pwd, 
+                                       self.src_db)
+            
+            # Don't do anything further. Allow unittests
             # to call methods in isolation.
             return
         
@@ -275,15 +291,12 @@ class AuxTableCopier(object):
         @rtype CopyResult
         '''
         
-        # In case the connect_to_src_db() call
-        # below fails, ensure that self.db isn't
-        # None in the 'finally' clause:
-        self.db = None
         try:
-            self.connect_to_src_db(self.user, 
-                                   self.host, 
-                                   self.pwd, 
-                                   self.src_db)
+            if self.db is not None and not self.db.isOpen():
+                self.connect_to_src_db(self.user, 
+                                       self.host, 
+                                       self.pwd, 
+                                       self.src_db)
     
             # Have to get schema for each table to make
             # the CSV header.
@@ -388,7 +401,7 @@ class AuxTableCopier(object):
         @rtype: Schema
         @raise RuntimeErrer: when MySQL database cannot be contacted. 
         '''
-        table_metadata_cmd = f'''SELECT column_name, data_type, column_default, ordinal_position, extra 
+        table_metadata_cmd = f'''SELECT column_name, data_type, character_maximum_length, column_default, ordinal_position, extra 
                                    FROM information_schema.COLUMNS 
                                   WHERE table_schema = '{AuxTableCopier.canvas_db_aux}' 
                                     AND table_name = '{table_name}';
@@ -396,10 +409,11 @@ class AuxTableCopier(object):
         schema_obj = Schema(table_name)
         
         table_metadata = self.db.query(table_metadata_cmd)
-        for (col_name, col_type, col_default, position, is_auto_increment) in table_metadata:
+        for (col_name, col_type, col_max_len, col_default, position, is_auto_increment) in table_metadata:
             # Add info about one column to this schema:
             schema_obj.push(col_name, 
-                            col_type, 
+                            col_type,
+                            col_max_len, 
                             col_default, 
                             position, 
                             col_is_auto_increment=(True if is_auto_increment.lower()=='auto_increment' else False))
@@ -433,7 +447,8 @@ class AuxTableCopier(object):
     
     def connect_to_src_db(self, user, host, pwd, src_db):
     
-        pwd = self.get_db_pwd()    
+        if pwd is None:
+            pwd = self.get_db_pwd()    
         self.log_info(f'Connecting to db {user}@{host}:{src_db}...')
                        
         try:
@@ -455,13 +470,13 @@ class AuxTableCopier(object):
         '''
         Release resources.
         '''
-        self.log_info(f'Closing db at {self.host}...')
+        self.log_info(f'Copier close(): Closing db at {self.host}...')
         try:
             self.db.close()
         except AttributeError:
             # Called before self.db was initialized
             pass
-        self.log_info(f'Done closing db at {self.host}.')
+        self.log_info(f'Done Copier close(): Closing db at {self.host}.')
          
     #------------------------------------
     # tables_to_copy 
@@ -532,9 +547,12 @@ class AuxTableCopier(object):
 
     def get_db_pwd(self):
         
-        if self.pwd is not None:
-            return self.pwd()
+        if self.host == 'localhost':
+            return ''
         
+        if self.pwd is not None:
+            return self.pwd
+                
         HOME = os.getenv('HOME')
         if HOME is not None:
             default_pwd_file = os.path.join(HOME, '.ssh', AuxTableCopier.canvas_pwd_file)
@@ -584,7 +602,8 @@ class AuxTableCopier(object):
         handler.setFormatter(formatter)
 
         # Add the handler to the logger
-        self.logger.addHandler(handler)
+        if len(self.logger.handlers) == 0:
+            self.logger.addHandler(handler)
         self.logger.setLevel(loggingLevel)
     
     #-------------------------
@@ -667,6 +686,7 @@ class Schema(collections.abc.MutableMapping):
     
     def push(self, col_name, 
                    col_type, 
+                   col_max_len=None,
                    col_default=None,
                    col_position=None,
                    col_is_auto_increment=False
@@ -681,6 +701,8 @@ class Schema(collections.abc.MutableMapping):
         @type col_name: str
         @param col_type: SQL type of column
         @type col_type: str
+        @param col_max_len: for varchar type: the max length of the values
+        @type col_max_len: int 
         @param col_default: default value of column
         @type col_default: str
         @type col_default: str
@@ -701,7 +723,7 @@ class Schema(collections.abc.MutableMapping):
             for col_obj in self.column_dict.values():
                 if col_obj.col_position >= col_position:
                     col_obj.col_position += 1 
-        self.column_dict[col_name] = SchemaColumn(col_name, col_type, col_default, col_position, col_is_auto_increment)
+        self.column_dict[col_name] = SchemaColumn(col_name, col_type, col_max_len, col_default, col_position, col_is_auto_increment)
     
     #-------------------------
     # add_index 
@@ -808,8 +830,16 @@ class Schema(collections.abc.MutableMapping):
             # Add one line to the CREATE TABLE stmt for this column:
             if schema_col_obj.col_default is None:
                 create_stmt += f"\t{schema_col_obj.col_name}  {schema_col_obj.col_type}"
+                if schema_col_obj.col_type == 'varchar':
+                    # Add length of the varchar:
+                    create_stmt += f"({schema_col_obj.col_max_len})"
             else:
-                create_stmt += f"\t{schema_col_obj.col_name}  {schema_col_obj.col_type} DEFAULT {schema_col_obj.col_default}"
+                create_stmt += f"\t{schema_col_obj.col_name}  {schema_col_obj.col_type}"
+                if schema_col_obj.col_type == 'varchar':
+                    # Add length of the varchar:
+                    create_stmt += f"({schema_col_obj.col_max_len})"
+                create_stmt += f" DEFAULT {schema_col_obj.col_default}"
+            
             if schema_col_obj.col_is_auto_increment:
                 create_stmt += ' AUTO_INCREMENT'
             # Close this col def line:
@@ -929,9 +959,10 @@ class Schema(collections.abc.MutableMapping):
 
 class SchemaColumn(object):
     
-    def __init__(self, col_name, col_type, col_default, position, is_auto_increment):
+    def __init__(self, col_name, col_type, col_max_len, col_default, position, is_auto_increment):
         self.__col_name     = col_name
         self.__col_type     = col_type
+        self.__col_max_len  = col_max_len
         self.__col_default  = col_default
         self.__col_position = position
         self.__is_auto_increment = is_auto_increment
@@ -947,6 +978,10 @@ class SchemaColumn(object):
     @property
     def col_type(self):
         return self.__col_type
+
+    @property
+    def col_max_len(self):
+        return self.__col_max_len
         
     @property
     def col_position(self):

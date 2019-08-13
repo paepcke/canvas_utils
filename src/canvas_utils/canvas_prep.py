@@ -22,7 +22,6 @@ from pymysql_utils.pymysql_utils import MySQLDB
 
 from pull_explore_courses import ECPuller
 
-
 class CanvasPrep(object):
     '''
     Draws on continuously changing data from Canvas.
@@ -67,9 +66,13 @@ class CanvasPrep(object):
     
     # datetime format used for appending to table names
     # for backups:
-    datetime_format = '%Y_%m_%d_%H_%M_%S_%f'
+    datetime_format              = '%Y_%m_%d_%H_%M_%S_%f'
+    datetime_format_no_subsecond = '%Y_%m_%d_%H_%M_%S'
     
-    datetime_regx = '[0-9]{4}_[0-9]{2}_[0-9]{2}_[0-9]{2}_[0-9]{2}_[0-9]{2}_[0-9]*$'
+    # Recognize: '2019_11_02_11_02_03'
+    #        or: '2019_11_02_11_02_03_1234':
+    datetime_regx = '[0-9]{4}_[0-9]{2}_[0-9]{2}_[0-9]{2}_[0-9]{2}_[0-9]{2}[_]{0,1}[0-9]*$'
+    
     datetime_pat = None # Will be set in __init__() to re.compile(CanvasPrep.datetime_regx)
     
     #-------------------------
@@ -85,7 +88,8 @@ class CanvasPrep(object):
                  new_only=False,
                  skip_backups=False,
                  dryrun=False, 
-                 logging_level=logging.INFO):
+                 logging_level=logging.INFO,
+                 unittests=False):
         '''
         @param user: login user for database
         @type user: str
@@ -105,7 +109,13 @@ class CanvasPrep(object):
         @type dryrun: bool 
         @param logging_level: how much of the run to document
         @type logging_level: logging.INFO/DEBUG/ERROR/...
+        @param unittests: set to True to have this instance do 
+            nothing but initialization of constants. Used to allow
+            unittests to call methods in isolation.
+        @type unittests: boolean
         '''
+        
+        self.unittests = unittests
 
         # Regex-parsing date-time strings used to name 
         # backup tables.
@@ -116,18 +126,22 @@ class CanvasPrep(object):
         self.dryrun = dryrun
         if user is None:
             user = CanvasPrep.default_user
+
+        if host is None:
+            host = CanvasPrep.default_host
             
+        self.host = host
+        
         if pwd is None:
             pwd = self.get_db_pwd()
-            
+        
+        self.pwd = pwd 
+        
         if target_db is None:
             target_db = CanvasPrep.canvas_db_aux
         else:
             target_db = target_db
             
-        if host is None:
-            host = CanvasPrep.default_host
-
         # Under certain conditions __file__ is a relative path.
         # Ensure availability of an absolute path:
         self.curr_dir = os.path.dirname(os.path.realpath(__file__))
@@ -159,11 +173,14 @@ class CanvasPrep(object):
                       (user, host, CanvasPrep.canvas_db_aux))
                       
         self.db = self.log_into_mysql(user, 
-                                      pwd, 
+                                      self.pwd, 
                                       db=target_db,
                                       host=host)
         
         self.log_info('Done connecting to db.')
+        
+        if unittests:
+            return
         
         # Used to have tables whose .sql was not self-contained;
         # it needed non-sql activity before or after. We took
@@ -235,13 +252,13 @@ class CanvasPrep(object):
         useful during unittests where we reach into unusual spots
         of the code.
         '''
-        
-        self.log_info('Closing db...')
         try:
-            self.db.close()
-            self.log_info('Done closing db.')    
-        except Exception as e:
-            self.log_warn(f"Error during database close: {repr(e)}")
+            self.log_info('Closing db...')
+            try:
+                self.db.close()
+                self.log_info('Done closing db.')    
+            except Exception as e:
+                self.log_warn(f"Error during database close: {repr(e)}")
         finally:
             self.shutdown_logging()
 
@@ -314,7 +331,6 @@ class CanvasPrep(object):
                1. Check that Terms_2019_02_10_14_34_10 exiss.
                2. If table Terms exists, drop table Terms
                3. Rename table Terms_2019_02_10_14_34_10 to Terms 
-                        table Terms_2019_02_10_14_34_10
             If Terms_2019_02_10_14_34_10 does not exist: error
         
         Example 2 
@@ -344,10 +360,13 @@ class CanvasPrep(object):
         
         for table_name in table_root_or_backup_names:
             
-            if self.is_backup_name(table_name):
+            # Get (aux_tbl_name, data-str, datetime obj) if 
+            # table_name is an aux table backup; else get False:
+            tbl_nm_components = self.is_backup_name(table_name) 
+            if tbl_nm_components:
                 
                 # Got an explicit backup filename to restore:
-                (root_name, _date_str, _datetime_obj) = self.backup_table_name_components(table_name)
+                (root_name, _date_str, _datetime_obj) = tbl_nm_components
                 
                 if not self.table_exists(table_name):
                     raise ValueError(f"Table {table_name} does not exist, so cannot be restored to the working copy.")
@@ -355,7 +374,7 @@ class CanvasPrep(object):
                 self.db.dropTable(root_name)
                 self.db.execute(f"RENAME TABLE {table_name} TO {root_name};")
                 continue
-            else:
+            elif table_name in CanvasPrep.tables:
                 # Table is a root name; find the most recent backup:
                 res = self.db.query(f'''
                                      select table_name 
@@ -406,7 +425,7 @@ class CanvasPrep(object):
                         WHERE table_name REGEXP '{table_root}_{CanvasPrep.datetime_regx}';
                        '''
         tbl_names_res = self.db.query(lst_tbl_cmd)
-        backup_table_names = [name for name in tbl_names_res]
+        backup_table_names = [table_name for table_name in tbl_names_res]
         self.log_info(f"Found {len(backup_table_names)} backed up tables for {table_root}." )
         
         # Sort the backups by age, most recent first:
@@ -416,14 +435,17 @@ class CanvasPrep(object):
         backup_table_names_sorted = sorted(backup_table_names,
                                            reverse=True,
                                            key=lambda tbl_name: CanvasPrep.backup_table_name_components(tbl_name)[2])
-
+        
+        num_deleted = 0
         # Remove tables beyond the desired number of keepers:
         for table_name in backup_table_names_sorted[num_to_keep:]:
             try:
                 self.db.dropTable(table_name)
+                num_deleted += 1
             except Exception as e:
                 self.log_err(f"Could not drop backup table {table_name}: {repr(e)}")
           
+        return num_deleted
                                       
     #-------------------------
     #  create_tables
@@ -575,6 +597,20 @@ class CanvasPrep(object):
     #--------------
 
     def get_db_pwd(self):
+        '''
+        Find appropriate password for logging into MySQL. Normally
+        a file is expected in CanvasPrep.canvas_pwd_file, and
+        the pwd is taken from there.
+        
+        Password convention is different from 
+        normal operation: If passed-in pwd is None
+        and host is localhost, we assume that there
+        is a user 'unittest' without a pwd.
+        
+        '''
+        
+        if self.host == 'localhost':
+            return ''
         
         HOME = os.getenv('HOME')
         if HOME is not None:
@@ -695,7 +731,7 @@ class CanvasPrep(object):
         Chop off that extension to get a table name.
         
         Initialize CanvasPrep.tables to be a list of all
-        table names. Also eturn that list.
+        table names. Also return that list.
         
         @return: list of tables that are created by .sql files in the Query directory
         @rtype: [str]
@@ -808,9 +844,27 @@ class CanvasPrep(object):
     #-------------------    
 
     def is_backup_name(self, table_name):
-        match = CanvasPrep.datetime_pat.search(table_name)
-        return True if match is not None else False 
+        '''
+        If the given table name, is a backup name of an aux table,
+        return a triple: the aux table's name, the date-time of
+        the backup as a string, and as a datetime object. 
+        
+        If table_name is not the backup name of an aux table, 
+        return False.
+        
+        @param table_name: name of (potential) aux table backup table
+        @type table_name: str
+        @return: triplet of the aux table name, the date str, and
+            the corresponding datetime object
+        @rtype: (str, str, datetime)
+        '''
 
+        try:
+            (root_name, date_str, datetime_obj) = self.backup_table_name_components(table_name)
+        except ValueError:
+            # The name is not a legal backup table name:
+            return False
+        return (root_name, date_str, datetime_obj)
     #------------------------------------
     # get_root_name 
     #-------------------    
@@ -862,17 +916,40 @@ class CanvasPrep(object):
             # the datetime. First ensure that the end of the
             # table name is a proper datetime string:
             try:
-                dt_str = re.findall(CanvasPrep.datetime_regx, backup_tbl_name)[0]
+                # Construct regexp to find <aux_table>_<datestr>.
+                # Will find: 'Terms_2019_08_10_09_01_08_387662',
+                # but not:   'Foo_2019_08_10_09_01_08_387662'.
+                # The regex will look like "Terms|Courses|..._<regex for datetime strings>"
+                
+                aux_backup_tbl_regex = f"{'|'.join(CanvasPrep.tables)}_{CanvasPrep.datetime_regx}"
+                
+                # The findall returns an empty array if no match is found. Else
+                # it will return an array with the table name. E.g. ['Terms']:
+                
+                tbl_name = re.findall(aux_backup_tbl_regex, backup_tbl_name)[0]
             except Exception as _e:
                 raise ValueError(f"Table name {backup_tbl_name} is not a valid backup name.")
             
+                
+            # Get a datetime obj from just the backup name's date string part:
+            dt_str_part_match_obj = re.search(CanvasPrep.datetime_regx, backup_tbl_name)
+            if dt_str_part_match_obj is None:
+                # Datetime matches the aux_backup_tbl_regex, but is still not a proper datetime:
+                raise ValueError(f"Table name {backup_tbl_name} is not a valid backup name.")
+                
+            # The date str part of the backup name is between the match's start and end: 
+            dt_str = backup_tbl_name[dt_str_part_match_obj.start():dt_str_part_match_obj.end()]
             try:
                 dt_obj = datetime.datetime.strptime(dt_str, CanvasPrep.datetime_format)
             except ValueError:
-                raise ValueError(f"Table name {backup_tbl_name} is not a valid backup name.")
-            # Next, get the front of the name without the
-            # separating underscore and datetime string:
-            tbl_name = backup_tbl_name[0:len(backup_tbl_name) - len(dt_str) - 1] 
+                # Maybe the date string had no sub-second component? Try
+                # again to get a datatime obj using a no-subsecond datetime format.
+                # if this fails, it will throw a value error:
+                try:
+                    dt_obj = datetime.datetime.strptime(dt_str, CanvasPrep.datetime_format_no_subsecond)
+                except ValueError:
+                    raise ValueError(f"Unrecognized datatime part of name '{backup_tbl_name}'")
+
             return(tbl_name, dt_str, dt_obj) 
         except IndexError:
             raise ValueError(f"Non-conformant backup table name '{backup_tbl_name}'")
@@ -1042,7 +1119,8 @@ class CanvasPrep(object):
         self.handler.setFormatter(formatter)
 
         # Add the handler to the logger
-        self.logger.addHandler(self.handler)
+        if len(self.logger.handlers) == 0:
+            self.logger.addHandler(self.handler)
         self.logger.setLevel(loggingLevel)
         
     #------------------------------------
