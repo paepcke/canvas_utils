@@ -6,21 +6,23 @@ Created on Jan 1, 2019
 '''
 
 import argparse
+import configparser
 import datetime
 import getpass
 import glob
 import logging
 from os import getenv
 import os
+from pathlib import Path
 import pickle
 import pwd
 import re
 import sys
-from pathlib import Path
 
 from pymysql_utils.pymysql_utils import MySQLDB
 
 from pull_explore_courses import ECPuller
+from query_sorter import QuerySorter
 
 class CanvasPrep(object):
     '''
@@ -120,6 +122,30 @@ class CanvasPrep(object):
         # Regex-parsing date-time strings used to name 
         # backup tables.
         CanvasPrep.datetime_pat = re.compile(CanvasPrep.datetime_regx)
+
+        # Under certain conditions __file__ is a relative path.
+        # Ensure availability of an absolute path:
+        self.curr_dir = os.path.dirname(os.path.realpath(__file__))
+        proj_root_dir = os.path.join(self.curr_dir, '../..')
+        
+        # Read any configs from the config file, if it exists:
+        config_parser = configparser.ConfigParser()
+        config_parser.read(os.path.join(proj_root_dir, 'setup.cnf'))
+
+        try:
+            CanvasPrep.default_host = config_parser['DATABASE']['default_host']
+        except KeyError:
+            pass
+
+        try:
+            CanvasPrep.canvas_db_aux = config_parser['DATABASE']['canvas_auxiliary_db_name']
+        except KeyError:
+            pass
+
+        try:
+            CanvasPrep.default_user = config_parser['DATABASE']['default_user']
+        except KeyError:
+            pass
         
         self.new_only = new_only
         self.skip_backups = skip_backups
@@ -142,10 +168,6 @@ class CanvasPrep(object):
         else:
             target_db = target_db
             
-        # Under certain conditions __file__ is a relative path.
-        # Ensure availability of an absolute path:
-        self.curr_dir = os.path.dirname(os.path.realpath(__file__))
-        
         # If user wants only particular tables to be created
         # then the tables arg will be a list of table names:
         if tables is not None and len(tables) > 0:
@@ -736,20 +758,8 @@ class CanvasPrep(object):
         @return: list of tables that are created by .sql files in the Query directory
         @rtype: [str]
         '''
-
-        curr_dir = os.path.dirname(os.path.realpath(__file__))        
-        # Directories where the template files are:
-        query_dir = os.path.join(curr_dir, 'Queries')
-        
-        # List of .sql files to fill in:
-        query_files = glob.glob(os.path.join(query_dir, '*.sql'))
-
-        CanvasPrep.tables = []        
-        for sql_file_path in query_files:
-            # Chop off the '.sql' from the file name
-            table_name = Path(sql_file_path).stem
-            CanvasPrep.tables.append(table_name)
-
+        query_sorter = QuerySorter()
+        CanvasPrep.tables = query_sorter.sorted_table_names
         return CanvasPrep.tables
     
     #------------------------------------
