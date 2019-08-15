@@ -1,3 +1,5 @@
+# data_dir='/home/paepcke/Code/canvas_utils/src/canvas_utils/Data/explore_courses.csv'
+
 DROP TABLE IF EXISTS ExploreCourses;
 CREATE TABLE ExploreCourses (
     course_code varchar(15),      # AA110
@@ -15,13 +17,14 @@ CREATE TABLE ExploreCourses (
     instructors varchar(255)      # 'Jane Doe', 'Jane Doe, Ken Franklin'
     ) engine=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-# <end_creation>
-
-
 # Pick up the Explore Courses parse of the EC .xml file we did
 # ahead of loading this file:
 
-LOAD DATA LOCAL INFILE '/Users/paepcke/EclipseWorkspacesNew/canvas_utils/src/canvas_utils/Data/explore_courses.csv'
+# The path to the explore_courses.csv file should match
+# the string assigned to 'data_dir' in the comment at
+# the top:
+
+LOAD DATA LOCAL INFILE '/home/paepcke/Code/canvas_utils/src/canvas_utils/Data/explore_courses.csv'
  INTO TABLE ExploreCourses
   FIELDS TERMINATED BY "," OPTIONALLY ENCLOSED BY '"' LINES TERMINATED BY '\n'
   IGNORE 1 LINES;
