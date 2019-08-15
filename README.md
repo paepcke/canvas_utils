@@ -8,7 +8,7 @@ Utilities for mining Canvas data. Creates a set of 'auxiliary' tables from expor
 - Export the auxiliary tables' schemas as .sql files, and their contents
   to .csv files in a specified directory
 
-In the following we call the MySQL database holding the full export `Export`, and the database holding the new auxiliary tables `Auxiliaries.` The following functions are performed when the generation of the `Auxiliaries` tables is requested:
+In the following we call the MySQL database holding the new auxiliary tables `Auxiliaries.` The following functions are performed when the generation of the `Auxiliaries` tables is requested:
 
 - Backup the existing `Auxiliaries` tables
 - Create the tables in `Auxiliaries`
@@ -94,6 +94,18 @@ Every auxiliary table is defined in a separate .sql file in subdirectory `Querie
 To add an additional table, create a file in the `Queries` directory. Make the file name the name of the table, with extension .sql. The `canvas_prep.py` command will do the rest.
 
 Similarly, the existing files may be modified to taste.
+
+### Implementation Note
+The table .sql files naturally contain table creation statements. Those statements reference the database (a.k.a. MySQL schema) where the `Auxiliaries` are to be constructed. They also reference the database where the full Canvas exports reside. These names are hard coded into the .sql files.
+
+This decision means that customizations need to replace those hardcoded names with those compatible at the installation site. In an effort to avoid this installation inconvenience, the initial implementation used placeholder names in the .sql files. Those placeholders were automatically replaced by the `canvas_prep.py` code.
+
+User feedback directed the change to hard coding the names. The addition of new tables, or users modifying the existing queries is a more frequent event than globally changing the database names in the sql statements once during the installation.
+
+The following 
+
+
+
 
 ## Passwords
  No passwords are contained in the code. However, each module that needs a MySQL password knows to look for the file `$HOME/.ssh/canvas_pwd`.
