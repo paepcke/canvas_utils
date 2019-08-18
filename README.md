@@ -63,10 +63,11 @@ Check file `setupSample.cfg` in the root directory. If any changes are needed, c
 
 ### Known Unpleasantnesses
 
-1. The pip installation requires `mysqlclient`, even if this package is not used later. There should be an install choice to avoid this requirement when the pure Python option is used later on. The `mysqlclient` will insist on the presence of `mysql_config`. To obtain it on Centos:
+1. The pip installation requires `mysqlclient`, even if this package is not used later. There should be an install choice to avoid this requirement when the pure Python option is used later on. The `mysqlclient` will insist on the presence of `mysql_config`. To obtain it (Centos directions below are uncertain):
 
 ```
- mysql-community-devel 
+Centos: sudo yum mysql-community-devel
+Ubuntu: sudo apt-get install libmysqlclient-dev
 ```
 
 Normally canvas_utils uses `mysqlclient` to access the MySQL server. On some installations there is a known incompatibility between `mysqlclient` and the `openssl` installation. If this should be the case, follow this procedure:
@@ -93,7 +94,7 @@ In addition, the three commands `canvas_prep.py`, `copy_aux_tables.py`, `restore
 
 The file `setup_Sample.cfg` in the project root directory enables settings for a number of defaults, including login names, database names, and host names.
 
-To make changes in this file, copy it to `setup.cfg` in the root directory. Then follow instructions in the file. This modified copy will be preserved during code updates. 
+To make changes in this file, copy it to `setup.cfg` in the root directory. Then follow instructions in the file. This modified copy will be preserved during code updates.
 
 ## Addition of new auxiliary tables
 
@@ -110,13 +111,67 @@ This decision means that customizations need to replace those hardcoded names wi
 
 User feedback directed the change to hard coding the names. The addition of new tables, or users modifying the existing queries is a more frequent event than globally changing the database names in the sql statements once during the installation.
 
-The following 
+However, if the database with Canvas full exports is not called canvasdata_prd, or if the desired destination database of the auxiliary tables is not to be called canvasdata_aux, then the aux table creation queries can be changed wholesale using the included utility `convert_queries.py`. The program accepts replacement database names, and replaces the hardcoded database names in the queries.
 
+## Localization
 
+Almost all of this package should work at other universities, with respective customization (see above). There is, however, one Stanford facility called `ExploreCourses`, which holds data about courses. This information is kept in table ExploreCourses. Two options:
 
+Option 1: Construct the course information for your university in the required format: Create in the Data subdirectory a file called explore_courses.csv. The expected schema should match the following MySQL create statement:
+
+```
++-----------------+--------------+
+| Field           | Type         |
++-----------------+--------------+
+| course_code     | varchar(15)  |
+| subject         | varchar(15)  |
+| course_name     | varchar(255) |
+| units_min       | int(11)      |
+| units_max       | int(11)      |
+| acad_year       | varchar(25)  |
+| course_id       | int(11)      |
+| acad_group      | varchar(25)  |
+| department      | varchar(40)  |
+| acad_career     | varchar(10)  |
+| ger_fulfillment | varchar(255) |
+| quarter_name    | varchar(40)  |
+| instructors     | varchar(255) |
++-----------------+--------------+
+```
+An example entry database is:
+
+```
+    course_code: AMSTUD25Q
+        subject: AMSTUD
+    course_name: The Origins of the Modern American City, 1865-1920 (HISTORY 55Q, URBANST 25Q)
+      units_min: 3
+      units_max: 3
+      acad_year: 2018-2019
+      course_id: 215582
+     acad_group: H&S
+     department: AMSTU
+    acad_career: UG
+ger_fulfillment: WAY-ED, WAY-SI
+   quarter_name: not given this year
+    instructors: None listed
+```
+An example column name header plus single record .csv entry would be:
+
+```
+"course_code","subject","course_name","units_min","units_max","acad_year","course_id","acad_group","department","acad_career",
+"ger_fulfillment","quarter_name","instructors"
+"ATHLETIC25","ATHLETIC","VARSITY - Gymnastics (Men)","1","2","2019-2020","201035","MED","MEDDPT","UG","","Spring,Winter,Fall",
+"Austin Douglas Lee, Thomas G Glielmi, Austin Douglas Lee, Thomas G Glielmi, Austin Douglas Lee, Thomas G Glielmi"
+"BIO25Q","BIO","Cystic fibrosis: from medical conundrum to precision medicine success story","3","3","2019-2020","111833","H&S
+","BIO","UG","GER: DB-NatSci, WAY-SMA","Spring","Ron R Kopito"
+```
+
+Option 2: Only the Courses table depends on this information. One could modify the Courses.sql file in the Queries subdirectory to not attempt a join with ExploreCourses.
 
 ## Passwords
- No passwords are contained in the code. However, each module that needs a MySQL password knows to look for the file `$HOME/.ssh/canvas_pwd`.
+ No passwords are contained in the code. However, each module that needs a MySQL password knows to look for the file `$HOME/.ssh/canvas_pwd`. Placing a password into this file will cause smooth operation.
+
+As is usual for this directory, make sure that both $HOME/.ssh, and the password file are only readable by owner.
  
 All commands also support the `-p` and `-u` options that prompt for the password at runtime. 
 

@@ -11,16 +11,16 @@ import sys
 
 class QueryConverter(object):
     '''
-    Replaces placeholders for Canvas export database
-    names with the actual names. The placeholders are
+    Replaces the hardcoded names of the Canvas database that contains
+    full exports, and the database name for the auxiliary tables
+    in the query files of the Queries subdirectory. See README.md for
+    why the names are hardcoded in those query files to be Stanford
+    specific. This utility is meant for localizing this package to
+    universities where these two databases are known by other names. 
     
-        <canvas_prd> for the name of the MySQL database (a.k.a. schema)
-                     where the full Canvas export resides.
-        <canvas_aux> for the name of the MySQL database (a.k.a. schema)
-                     name where auxiliary Canvas files will be placed.
-        <data_dir>   for the path the directory where course information
-                     csv files will be provided to canvas_prep.py.
-
+    On the command line the utility accepts replacements for the 
+    canvasdata_prd (full exports db), the canvasdata_aux (destination 
+    of auxiliary tables), and location of the course information directory.
     '''
     aux_placeholder      = '<canvas_aux>'
     prd_placeholder      = '<canvas_db>'
@@ -134,7 +134,7 @@ if __name__ == '__main__':
     
     curr_file  = os.path.basename(__file__)
     
-    usage = f"Usage: {curr_file} <db name with Canvas export> <db name for result tables> <course info directory>" 
+    usage = f"Usage: {curr_file} <db name with Canvas exports> <db name for result tables> <course info directory>" 
     
     if len(sys.argv) != 4:
         print(usage)
