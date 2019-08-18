@@ -59,7 +59,15 @@ Switch to the project root directory, create a virtual environment if desired, a
 
 to install the needed Python packages.
 
-Check file `setupSample.cfg` in the root directory. If any changes are needed, copy the cile to `setup.cfg`, and modify options there.
+Check file `setupSample.cfg` in the root directory. If any changes are needed, copy the file to `setup.cfg`, and modify options there.
+
+### Known Unpleasantnesses
+
+1. The pip installation requires `mysqlclient`, even if this package is not used later. There should be an install choice to avoid this requirement when the pure Python option is used later on. The `mysqlclient` will insist on the presence of `mysql_config`. To obtain it on Centos:
+
+```
+ mysql-community-devel 
+```
 
 Normally canvas_utils uses `mysqlclient` to access the MySQL server. On some installations there is a known incompatibility between `mysqlclient` and the `openssl` installation. If this should be the case, follow this procedure:
 

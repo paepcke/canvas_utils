@@ -50,9 +50,15 @@ class QueryConverter(object):
         @type aux_db: str
         @param course_info_dir: replacement text for 'data_dir'
         @type course_info_dir: str
-        @param files_to_replace: list of files without paths in 
-            Query directory to change. If None: all .sql files
+        @param files_to_replace: list of full path files to 
+            create a replacement for. If None: 
+            Default: All .sql files in the Queries subdirectory 
+            below this file's directory.
         @type files_to_replace: [str]
+        @param dest_dir: directory where to place the new 
+            query files. Default: directory where this script
+            resides. 
+        @type dest_dir: str
         '''
 
         self.prd_db = prd_db
@@ -60,17 +66,40 @@ class QueryConverter(object):
         self.course_info_dir = course_info_dir
         
         curr_dir  = os.path.dirname(__file__)
-        query_dir = os.path.join(curr_dir, 'Queries')
-        files = os.listdir(query_dir)
-        for file in files:
-            # Save the original
-            curr_file = os.path.join(query_dir, file)
-            saved_file = os.path.join(query_dir, file) + '_Orig'
-            shutil.move(curr_file, saved_file)
+        
+        if dest_dir is None:
+            dest_dir = curr_dir
+            
+        if files_to_replace is None:
+            # Replace all .sql files in the Queries subdir:
+            
+            # Queries subdir below this script's dir:
+            query_dir = os.path.join(curr_dir, 'Queries')
+            files_to_replace = os.listdir(query_dir)
+            
+            # Make the file names full paths:
+            files_to_replace = [os.path.join(curr_dir, file_name) for file_name in files_to_replace]
+            
+            # Filter for pulling out only .sql files:
+            sql_file_filter = filter(lambda fname: fname.endswith('.sql'), files_to_replace)
+            # Pull the .sql files out of the filter:
+            files_to_replace = [file_name for file_name in sql_file_filter]
+
+        elif not type(files_to_replace) == list:
+            # If files to replace is given, must be a list:
+            files_to_replace = [files_to_replace]
+        
+        for file in files_to_replace:
+            # Save the original in the dest dir with extension '_Orig':
+            saved_file = os.path.join(dest_dir, file) + '_Orig'
+            shutil.copy(file, saved_file)
+            
             # Replace the placeholders in saved_file,
             # and place the resulting file as the original
             # query file:
-            self.replace_to_local(saved_file, curr_file)
+            
+            dest_file = os.path.join(dest_dir, os.path.basename(file))
+            self.replace_to_local(saved_file, dest_file)
     
     #-------------------------
     # replace_to_local 
@@ -89,14 +118,15 @@ class QueryConverter(object):
         @type dst: str
         '''
         
-        with open(src, 'r') as fd_in:
-            with open(dst, 'w') as fd_out:
-                line = fd_in.readline().strip()
-                line.replace(QueryConverter.aux_placeholder, self.aux_db)
-                line.replace(QueryConverter.prd_placeholder, self.prd_db)
-                line.replace(QueryConverter.data_dir_placeholder, self.course_info_dir)
-                
-                fd_out.writeline()
+        with open(dst, 'w') as fd_out:
+            with open(src, 'r') as fd_in:
+                for line in fd_in:
+                    line = line.strip('\n')
+                    line = line.replace(QueryConverter.aux_placeholder, self.aux_db)
+                    line = line.replace(QueryConverter.prd_placeholder, self.prd_db)
+                    line = line.replace(QueryConverter.data_dir_placeholder, self.course_info_dir)
+                    
+                    fd_out.write(line + '\n')
                 
     # -------------------------- Main --------------
     

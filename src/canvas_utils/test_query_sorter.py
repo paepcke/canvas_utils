@@ -5,8 +5,6 @@ Created on Aug 15, 2019
 '''
 import unittest
 from query_sorter import QuerySorter
-from pkg_resources._vendor.pyparsing import operatorPrecedence
-from pip._vendor.six import assertCountEqual
 
 TEST_ALL = True
 #TEST_ALL = False
@@ -45,10 +43,10 @@ class QuerySorterTester(unittest.TestCase):
         # Test table without dependencies:
         precedence_dict = {'Terms': [], 'CourseEnrollment': ['Terms']}
 
-        free_list = self.sorter.resolve_dependencies(precedence_dict, 'Terms', [])
+        free_list = self.sorter.resolve_dependencies(precedence_dict, ['Terms'], [])
         self.assertCountEqual(free_list, ['Terms'])
 
-        free_list = self.sorter.resolve_dependencies(precedence_dict, 'CourseEnrollment', [])
+        free_list = self.sorter.resolve_dependencies(precedence_dict, ['CourseEnrollment'], [])
         self.assertCountEqual(free_list, ['Terms', 'CourseEnrollment'])
 
     #-------------------------
@@ -73,6 +71,35 @@ class QuerySorterTester(unittest.TestCase):
         precedence_dict = {'Terms': [], 'CourseEnrollment': ['NoTable']}
         with self.assertRaises(ValueError):
             ordered_table_list = self.sorter.sort(precedence_dict)
+            
+    #-------------------------
+    # testDependencyLoopDetection
+    #--------------
+
+    @unittest.skipIf(not TEST_ALL, 'Temporarily skip this test.')
+    def testDependencyLoopDetection(self):
+        # No loop:
+        precedence_dict = {'Terms': [], 'CourseEnrollment': ['Terms']}
+        self.assertTrue(self.sorter.detect_mutual_table_dependencies(precedence_dict))
+        
+        # Simple loop, immediately visible:
+        precedence_dict = {'Terms': ['CourseEnrollment'], 'CourseEnrollment': ['Terms']}
+        try:
+            self.sorter.detect_mutual_table_dependencies(precedence_dict)
+            self.fail("Expected ValueError, which was not raised.")
+        except ValueError as e:
+            # Ensure there is an explanatory error text:
+            self.assertCountEqual(e.args, (('Terms', 'CourseEnrollment'), ": tables are mutually dependent."))
+
+            
+        # Indirect dependency: A dependsOn B, which dependsOn C, which dependsOn A:
+        precedence_dict = {'Terms': ['CourseEnrollment'], 'CourseEnrollment': ['Student'], 'Student' : ['Terms']}
+        try:
+            self.sorter.detect_mutual_table_dependencies(precedence_dict)
+            self.fail("Expected ValueError, which was not raised.")
+        except ValueError as e:
+            # Ensure there is an explanatory error text:
+            self.assertCountEqual(e.args, (('Terms', 'Student'), ": tables are mutually dependent."))
             
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']

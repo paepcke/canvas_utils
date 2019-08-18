@@ -9,11 +9,9 @@ import argparse
 import configparser
 import datetime
 import getpass
-import glob
 import logging
 from os import getenv
 import os
-from pathlib import Path
 import pickle
 import pwd
 import re
@@ -77,6 +75,8 @@ class CanvasPrep(object):
     
     datetime_pat = None # Will be set in __init__() to re.compile(CanvasPrep.datetime_regx)
     
+    unittests = False
+    
     #-------------------------
     # Constructor 
     #--------------
@@ -117,7 +117,7 @@ class CanvasPrep(object):
         @type unittests: boolean
         '''
         
-        self.unittests = unittests
+        self.unittests = CanvasPrep.unittests = unittests
 
         # Regex-parsing date-time strings used to name 
         # backup tables.
@@ -758,6 +758,7 @@ class CanvasPrep(object):
         @return: list of tables that are created by .sql files in the Query directory
         @rtype: [str]
         '''
+        #******query_sorter = QuerySorter(unittests=cls.unittests)
         query_sorter = QuerySorter()
         CanvasPrep.tables = query_sorter.sorted_table_names
         return CanvasPrep.tables
