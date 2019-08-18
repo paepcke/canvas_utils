@@ -16,18 +16,3 @@ SELECT distinct user_id, user_dim.name AS instructor_name
        ) AS UserIdName
        LEFT JOIN canvasdata_prd.user_dim
          ON UserIdName.user_id = user_dim.id;
-
-
--- DROP TABLE IF EXISTS Instructors;
--- CREATE TABLE Instructors (
---     user_id bigint,
---     instructor_name varchar(255)
---     ) engine=MyISAM;
-
--- INSERT INTO Instructors
---   SELECT user_id,
---          name AS instructor_name
---     FROM canvasdata_prd.enrollment_dim
---       LEFT JOIN canvasdata_prd.user_dim
---      ON enrollment_dim.user_id = user_dim.id
---    WHERE enrollment_dim.type = 'TeacherEnrollment';
