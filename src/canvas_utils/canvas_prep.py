@@ -130,22 +130,34 @@ class CanvasPrep(object):
         
         # Read any configs from the config file, if it exists:
         config_parser = configparser.ConfigParser()
-        config_parser.read(os.path.join(proj_root_dir, 'setup.cnf'))
+        config_parser.read(os.path.join(proj_root_dir, 'setup.cfg'))
 
-        try:
-            CanvasPrep.default_host = config_parser['DATABASE']['default_host']
-        except KeyError:
-            pass
-
-        try:
-            CanvasPrep.canvas_db_aux = config_parser['DATABASE']['canvas_auxiliary_db_name']
-        except KeyError:
-            pass
-
-        try:
-            CanvasPrep.default_user = config_parser['DATABASE']['default_user']
-        except KeyError:
-            pass
+        if not unittests:
+            try:
+                CanvasPrep.default_host = config_parser['DATABASE']['default_host']
+            except KeyError:
+                pass
+    
+            try:
+                CanvasPrep.canvas_db_aux = config_parser['DATABASE']['canvas_auxiliary_db_name']
+            except KeyError:
+                pass
+    
+            try:
+                CanvasPrep.default_user = config_parser['DATABASE']['default_user']
+            except KeyError:
+                pass
+        else:
+            try:
+                CanvasPrep.default_host = config_parser['TESTMACHINE']['mysql_host']
+            except KeyError:
+                pass
+    
+            try:
+                CanvasPrep.default_user = config_parser['TESTMACHINE']['mysql_user']
+            except KeyError:
+                pass
+            
         
         self.new_only = new_only
         self.skip_backups = skip_backups

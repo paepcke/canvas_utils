@@ -56,7 +56,9 @@ class AuxTableCopier(object):
                  tables=None,    # Default: all tables are copied 
                  copy_format='csv', 
                  logging_level=logging.INFO,
-                 unittests=False):
+                 unittests=False,
+                 unittest_db_name=None
+                 ):
         '''
         
         @param user: login user for database. Default: AuxTableCopier.default_user  
@@ -79,12 +81,19 @@ class AuxTableCopier(object):
         @param unittests: set to True to do nothing significant, and let 
             unittests call methods in isolation.
         @type unittests.
+        @param: unittests_db_nm: Only relevant if unittests is True. Name of
+            database where unittests will be performed.
+        
         '''
-        if unittests and host == 'localhost':
+        if unittests:
             # Running unittests on localhost. We stipulate
             # that a db 'Unittest' exists to which user
             # unittest has permissions:
-            AuxTableCopier.canvas_db_aux = 'Unittest'
+            if unittest_db_name is None:
+                AuxTableCopier.canvas_db_aux = 'Unittest'
+            else:
+                AuxTableCopier.canvas_db_aux = unittest_db_name
+            
         
         self.setup_logging()
         self.logger.setLevel(logging_level)

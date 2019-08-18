@@ -7,6 +7,7 @@ TODO:
 
 '''
 import configparser
+import getpass
 import os
 import shutil
 import unittest
@@ -49,26 +50,27 @@ class AuxTableCopyTester(unittest.TestCase):
                             os.path.join(conf_file_dir, 'setup.cfg'))        
         
         config = configparser.ConfigParser()
-        config.read(os.path.join(os.path.dirname(__file__), '../../setup.cfg'))
+        setup_file_name = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../setup.cfg'))
+        config.read(setup_file_name)
         test_host       = cls.test_host = config['TESTMACHINE']['mysql_host']
         user            = cls.user = config['TESTMACHINE']['mysql_user']
-        
-        if test_host == 'localhost':
-            mysql_pwd = cls.mysql_pwd = ''
-        else:
-            mysql_pwd = cls.mysql_pwd = None
 
-        cls.mysql_pwd = mysql_pwd
         cls.test_host = test_host
         cls.user      = user
+        
+        if test_host == 'localhost':
+            # No password for user unittest:
+            mysql_pwd = cls.mysql_pwd = ''
+        else:
+            mysql_pwd = cls.mysql_pwd = cls.get_db_pwd()
 
-        copier_obj = AuxTableCopier(user=user, 
-                                    host=test_host, 
-                                    pwd=mysql_pwd,
-                                    unittests=True)
-        AuxTableCopyTester.copier_obj = copier_obj
-        AuxTableCopyTester.db = db = copier_obj.db            
+        cls.mysql_pwd = mysql_pwd
 
+        
+        db = AuxTableCopyTester.db = MySQLDB(user=user, 
+                                             passwd=mysql_pwd, 
+                                             db='information_schema', 
+                                             host=test_host)
         # If not working on localhost, where we expect a db
         # 'Unittest" Ensure there is a unittest db for us to work in.
         # We'll delete it later:
@@ -80,7 +82,7 @@ class AuxTableCopyTester(unittest.TestCase):
             unittest_db_nm = 'unittests_'
             nm_indx = 0
             try:
-                copier_obj.log_info("Looking for unused database name for unittest activity...")
+                print("Looking for unused database name for unittest activity...")
                 while True:
                     nm_indx += 1
                     db_name = unittest_db_nm + str(nm_indx)
@@ -95,10 +97,10 @@ class AuxTableCopyTester(unittest.TestCase):
                             # Found a db name that doesn't exist:
                             break
                     except Exception as e:
-                        copier_obj.close()
+                        db.close()
                         raise RuntimeError(f"Cannot probe for existing db '{db_name}': {repr(e)}")
             
-                copier_obj.log_info(f"Creating database {db_name} for unittest activity...")
+                print(f"Creating database {db_name} for unittest activity...")
                 # Create the db to play in:
                 try:
                     db.execute(f"CREATE DATABASE {db_name};")
@@ -106,7 +108,7 @@ class AuxTableCopyTester(unittest.TestCase):
                     raise RuntimeError(f"Cannot create temporary db '{db_name}': {repr(e)}")
             finally:
                 cls.db_name = db_name
-        copier_obj.close()
+        db.close()
         
     #-------------------------
     # tearDownClass 
@@ -116,7 +118,8 @@ class AuxTableCopyTester(unittest.TestCase):
     def tearDownClass(cls):
         super(AuxTableCopyTester, cls).tearDownClass()
         try:
-            AuxTableCopyTester.copier_obj.close()
+            #AuxTableCopyTester.copier_obj.close()
+            pass
         except Exception:
             pass
 
@@ -129,20 +132,21 @@ class AuxTableCopyTester(unittest.TestCase):
         # Get a new copier, after closing the current one:
         try:
             self.copier.close()
-        except Exception:
+        except Exception as _e:
             pass
         
         mysql_pwd = AuxTableCopyTester.mysql_pwd
         test_host = AuxTableCopyTester.test_host
         user      = AuxTableCopyTester.user
+        self.db_name   = AuxTableCopyTester.db_name
         
         self.copier = AuxTableCopier(user=user, 
                                      host=test_host, 
                                      pwd=mysql_pwd,
-                                     unittests=True)
+                                     unittests=True,
+                                     unittest_db_name=self.db_name)
         
         self.db        = self.copier.db
-        self.db_name   = AuxTableCopyTester.db_name
 
         # Make a fresh version of the unittest tables.
         self.removeAllUnittestTables(self.db)        
@@ -382,7 +386,7 @@ class AuxTableCopyTester(unittest.TestCase):
     # testCopyOneTable 
     #--------------
     
-    @unittest.skipIf(not TEST_ALL, 'Temporarily skip this test.')
+    #*****@unittest.skipIf(not TEST_ALL, 'Temporarily skip this test.')
     def testCopyOneTable(self):
         
         # Add some rows to the test table:
@@ -595,6 +599,29 @@ This is text.,One varchar,10.5
                               ''')
         table_names = [table_name for table_name in tables_res]
         return table_names        
+    
+    #-------------------------
+    # get_db_pwd 
+    #--------------
+    
+    @classmethod
+    def get_db_pwd(cls):
+        
+        if cls.test_host == 'localhost':
+            return ''
+        
+        HOME = os.getenv('HOME')
+        if HOME is not None:
+            default_pwd_file = os.path.join(HOME, '.ssh', AuxTableCopier.canvas_pwd_file)
+            if os.path.exists(default_pwd_file):
+                with open(default_pwd_file, 'r') as fd:
+                    pwd = fd.readline().strip()
+                    return pwd
+            
+        # Ask on console:
+        pwd = getpass.getpass("Password for Canvas database: ")
+        return pwd
+    
     
 # --------------------------------------- Main -----------------        
 if __name__ == "__main__":

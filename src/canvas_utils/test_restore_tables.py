@@ -181,42 +181,41 @@ class CanvasRestoreTablesTests(unittest.TestCase):
         tbl2_b2 = 'AssignmentSubmissions_2019_01_10_14_14_40_123456'
         #tbl4    = 'StudentUnits'
 
-        restore_obj = TableRestorer(unittests=True)
         tbl_grp = [tbl1]
-        res = restore_obj.remove_table_groups(tbl_grp)
+        res = self.restore_obj.remove_table_groups(tbl_grp)
         # Expect no names left, b/c did not ask for
         # any name families to be retained:
         self.assertEqual(len(res), 0)
         
         tbl_grp = [tbl0]
-        res = restore_obj.remove_table_groups(tbl_grp, table_names_to_keep=[tbl1])
-        res = restore_obj.remove_table_groups(tbl_grp)
+        res = self.restore_obj.remove_table_groups(tbl_grp, table_names_to_keep=[tbl1])
+        res = self.restore_obj.remove_table_groups(tbl_grp)
         # Expect name to be removed, b/c it's not
         # a real aux table name:
         self.assertEqual(len(res), 0)
         
         tbl_grp = [tbl1, tbl1_b1]
-        res = restore_obj.remove_table_groups(tbl_grp, table_names_to_keep=[tbl1])
+        res = self.restore_obj.remove_table_groups(tbl_grp, table_names_to_keep=[tbl1])
         # Expect both tables left:
         # a real aux table name:
         self.assertEqual(len(res), 2)
         
         tbl_grp = [tbl2, tbl2_b1, tbl2_b2]
-        res = restore_obj.remove_table_groups(tbl_grp, table_names_to_keep=[tbl2])
+        res = self.restore_obj.remove_table_groups(tbl_grp, table_names_to_keep=[tbl2])
         # Expect all tables left:
         # a real aux table name:
         self.assertEqual(len(res), 3)
         
         # Specifying one backup table for keepers:
         tbl_grp = [tbl2, tbl2_b1, tbl2_b2]
-        res = restore_obj.remove_table_groups(tbl_grp, table_names_to_keep=[tbl2_b2])
+        res = self.restore_obj.remove_table_groups(tbl_grp, table_names_to_keep=[tbl2_b2])
         # Expect all tables left:
         # a real aux table name:
         self.assertEqual(len(res), 1)
         
         # Specifying two backup table for keepers:
         tbl_grp = [tbl2, tbl2_b1, tbl2_b2]
-        res = restore_obj.remove_table_groups(tbl_grp, table_names_to_keep=[tbl2_b1, tbl2_b2])
+        res = self.restore_obj.remove_table_groups(tbl_grp, table_names_to_keep=[tbl2_b1, tbl2_b2])
         # Expect both tables left:
         # a real aux table name:
         self.assertEqual(len(res), 2)
