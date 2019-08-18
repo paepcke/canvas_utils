@@ -3,12 +3,12 @@ Created on Aug 14, 2019
 
 @author: paepcke
 '''
+from _io import StringIO
 import copy
 import os
 import re
 import sys
 
-from io import StringIO, BufferedRWPair
 
 class QuerySorter(object):
     '''

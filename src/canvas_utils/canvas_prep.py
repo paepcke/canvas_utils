@@ -770,7 +770,6 @@ class CanvasPrep(object):
         @return: list of tables that are created by .sql files in the Query directory
         @rtype: [str]
         '''
-        #******query_sorter = QuerySorter(unittests=cls.unittests)
         query_sorter = QuerySorter()
         CanvasPrep.tables = query_sorter.sorted_table_names
         return CanvasPrep.tables
