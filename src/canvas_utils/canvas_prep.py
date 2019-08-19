@@ -943,7 +943,7 @@ class CanvasPrep(object):
                 # but not:   'Foo_2019_08_10_09_01_08_387662'.
                 # The regex will look like "Terms|Courses|..._<regex for datetime strings>"
                 
-                aux_backup_tbl_regex = f"{'|'.join(CanvasPrep.tables)}_{CanvasPrep.datetime_regx}"
+                aux_backup_tbl_regex = f"({'|'.join(CanvasPrep.tables)})_{CanvasPrep.datetime_regx}"
                 
                 # The findall returns an empty array if no match is found. Else
                 # it will return an array with the table name. E.g. ['Terms']:
