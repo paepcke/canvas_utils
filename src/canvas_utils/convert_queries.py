@@ -100,6 +100,7 @@ class QueryConverter(object):
             
             dest_file = os.path.join(dest_dir, os.path.basename(file))
             self.replace_to_local(saved_file, dest_file)
+            os.remove(saved_file)
     
     #-------------------------
     # replace_to_local 
