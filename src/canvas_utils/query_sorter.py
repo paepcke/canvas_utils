@@ -8,8 +8,7 @@ import copy
 import os
 import re
 import sys
-
-
+      
 class QuerySorter(object):
     '''
     Runs through all queries in the Queries subdirectory,
@@ -79,7 +78,9 @@ class QuerySorter(object):
         @rtype: {str : str}
         '''
         
-        full_query_paths = [os.path.join(self.query_dir, file_name) for file_name in file_basenames]
+        full_query_paths = [os.path.join(self.query_dir, file_name)
+                            for file_name in file_basenames
+                              if file_name.endswith('.sql')]            
         text_dict = {}
         
         for query_path in full_query_paths:
@@ -190,102 +191,22 @@ class QuerySorter(object):
         @type precedence_dict: { str : [str]}
         @return: ordered list of table names
         @rtyp: [str]
-        @raise ValueError: if there two tables have a mutual dependency. 
+        @raise TableError: if there two tables have a mutual dependency,
+            or if any table in the queries has not corresponding 
+            .sql file in Queries.
         '''
-        
-        # Before doing any work, ensure that all tables
-        # listed in dependency arrays have an implementation:
-        dependency_set = set()
-        # Collect each table's dependencies into a set:
-        for prec_list in precedence_dict.values():
-            dependency_set.update(prec_list)
-
-        # The following test for "no table files missing" 
-        # isn't needed, b/c we build the lists from file names that 
-        # do exist in the Queries subdir. But safety first:
-        
-        # Put list of tables as manifested in the 
-        # Queries directory into another set:
-        existing_tables = set(precedence_dict.keys())
-        # Tables in dependencies shouldn't have tables
-        # that are not in the directory:
-        if len(dependency_set - existing_tables) > 0:
-            # Shouldn't happen: 
-            raise ValueError(f"Some table(s) in queries don't have corresponding query files: " +
-                                f"{str(dependency_set - existing_tables)}")
         # Check for cycles: tables that mutually require the
         # other one to be loaded first: Throws a value
         # errors with informative msg if dicovers a conflict.
         # Else returns True:
-        self.detect_mutual_table_dependencies(precedence_dict)
-        
-         
-        # Do the work; the empty list is number of already 
-        # processed tables
-        ordered_tables = self.resolve_dependencies(precedence_dict, existing_tables, [])
+        ordered_tables = self.detect_mutual_table_dependencies(precedence_dict)
         return ordered_tables
         
-    #-------------------------
-    # resolve_dependencies 
-    #--------------
-
-    def resolve_dependencies(self, precedence_dict, tables_to_process, tables_processed):         
-        '''
-        Given an unordered list of table names, return 
-        an ordered list that won't incur an error when MySQL 
-        loads the corresponding file in the given order.
-
-        The method is recursive, diving depth-first into the
-        dependencies.
-        
-        @param precedence_dict: map from table names to lists of
-            tables that must be loaded ahead of time.
-        @type precedence_dict: { str : [str] }
-        @param tables_to_process: names tables whose dependencies
-            are to be resolved
-        @type tables_to_process: str
-        @param tables_processed: ordered list of table names that can be
-            loaded into MySQL in order without incurring a table not
-            found error. Grows with each recursive call. Typically
-            empty on first call.
-        @type tables_processed: [str]
-        @return: a list of tables in an order that will work 
-            when loaded into MySQL
-        @rtype: [str]
-        '''
-        # Top loop: run through the given tables,
-        # find their dependencies. Recursively use that
-        # dependencies list in the recursive call:
-        
-        while len(tables_to_process) > 0:
-            table_to_process = tables_to_process.pop()
-            # If we processed this table b/c it was a 
-            # dependency of another table, then this table's
-            # dependencies have also been processed:
-            if table_to_process in tables_processed:
-                continue
-            
-            # Never considered this table. Grab the table's dependencies:
-            dependencies = precedence_dict[table_to_process]
-            
-            # If no dependencies, or this table has already
-            # been processed, (in which case its dependencies have
-            # also been process): Add the table:
-            if len(dependencies) == 0:
-                tables_processed.append(table_to_process)
-                continue
-            # Have list of dependencies, recursively examine them:
-            tables_processed = self.resolve_dependencies(precedence_dict, dependencies, tables_processed)
-            if table_to_process not in tables_processed:
-                tables_processed.append(table_to_process)
-        
-        return tables_processed
-
     #-------------------------
     # detect_mutual_table_dependencies 
     #--------------
     
-    def detect_mutual_table_dependencies(self, precedence_dict, table_list_todo=None, known_dependencies=[]):
+    def detect_mutual_table_dependencies(self, precedence_dict, table_list_todo=None, tables_done=[], tables_being_considered=[]):
         '''
         Given a precedence dict: {table : [table1, table2, ...]} of
         tables and their dependencies, return True if there are
@@ -315,51 +236,144 @@ class QuerySorter(object):
         @param table_list_todo: list of table names that are to
             be examined for conflicts.
         @type table_list_todo: [str]
-        @param known_dependencies: list of dependencies discovered
-            during recursive descent; table names.
-        @type known_dependencies: [str]
-        @return: True if no problem.
-        @rtype: bool
-        @raise: ValueError if mutual dependency is found
+        @param tables_done: list of tables that are already processed
+        @type tables_done: [str]
+        @param tables_being_considered: list of tables that are being
+            processed in the current layers of recursion
+        @type tables_being_considered: [str]
+        @return: list of tables in the order in which they can be loaded.
+        @rtype: [str]
+        @raise: TableError if mutual dependency is found, or a table name
+            appears in the queries that does not have a corresponding .sql
+            file in Queries.
         '''
 
         if table_list_todo is None:
-            # First time in (i.e top level): Copy the
-            # passe-in precedence_dict, b/c belo we pop 
-            # values off some of its entries.
+            # First time in (i.e top level) 
+            top_level = True
+            # Copy the passed-in precedence_dict, b/c belo we pop 
+            # values off some of its entries.            
             precedence_dict = copy.deepcopy(precedence_dict)
+            
+            # Total number of tables to examine:
             table_list_todo = list(precedence_dict.keys())
+            
+            # Right off the bat: declare all tables without
+            # dependencies winners: Transfer them to tables_done:
+            no_precedence_table_it = filter(lambda tname: len(precedence_dict[tname]) == 0, table_list_todo)
+            tables_done = [tname for tname in no_precedence_table_it]
+            # Remove the done ones from the todos:
+            table_list_todo = [tbl_name for tbl_name in table_list_todo if tbl_name not in tables_done]
+            
+            # Sort tables todo by decreasing number of 
+            # dependencies that each table needs. The
+            # array pop() in the while loop will therefore 
+            # do as many low dependency tables as possible:
+            table_list_todo = sorted(table_list_todo, 
+                                    key=lambda tbl_name: len(precedence_dict[tbl_name]), 
+                                    reverse=True)
+            # No dependency chain yet:
+            tables_being_considered = []
+            # No error encountered yet:
+            original_error = None
+            
+        else:
+            # This is a recursive call:
+            top_level = False
+            
         while True:
             try:
                 curr_table = table_list_todo.pop()
             except IndexError:
                 # All done:
-                return True
-                
-            # Don't modify the precendence_dict itself
-            # when we pass curr_dependencies down into the
-            # recursive call, where it gets pop()ed:
-            curr_dependencies = precedence_dict[curr_table]
-            if len(curr_dependencies) == 0:
-                return True
-            if curr_table in known_dependencies:
-                # Pass the just discovered table up the unwind.
-                # It will be caught in the try/except below,
-                # where curr_table will contain the table with
-                # which this one conflicts:
-                raise ValueError((curr_table, None))
-            known_dependencies.extend(curr_dependencies)
-            try:
-                self.detect_mutual_table_dependencies(precedence_dict, curr_dependencies, known_dependencies)
-            except ValueError as e:
-                # Exception method will have something
-                # like (('Terms', None),):
-                (conflict_table, _top_level_table) = e.args[0]
-                # Create a nice error message:
-                raise ValueError((conflict_table, curr_table), ": tables are mutually dependent.")
-                
-
+                return tables_done
             
+            if curr_table in tables_done:
+                # Satisfied this table's dependencies
+                # earlier, or has none:
+                return tables_done
+            
+            if curr_table in tables_being_considered:
+                raise InternalTableError(curr_table, "Mutual load order dependency")
+            
+            try: 
+                curr_dependencies = precedence_dict[curr_table]
+            except KeyError as e:
+                raise InternalTableError(curr_table, f"Missing table file {curr_table}.sql in Queries directory")
+                
+            satisfied = [dep for dep in curr_dependencies if dep in tables_done]
+            curr_dependencies = [unfilled for unfilled in curr_dependencies if unfilled not in satisfied] 
+            
+            if len(curr_dependencies) > 0:
+                try:
+                    tables_being_considered.append(curr_table)
+                    tables_done = self.detect_mutual_table_dependencies(precedence_dict, 
+                                                                        table_list_todo=curr_dependencies, 
+                                                                        tables_done=tables_done, 
+                                                                        tables_being_considered=tables_being_considered
+                                                                        )
+                    tables_being_considered.pop()
+                except InternalTableError as e:
+                    original_error = e
+                    # Unwind the recursion:
+                    if not top_level:
+                        raise e
+                    
+                # Recursion unwound, check for error:
+                if original_error:
+                    # Add the current table to the end of
+                    # the dependency chain. That will be 
+                    # the same as the list head. Ex:
+                    #   [CourseEnrollment, Terms, Student, CourseEnrollment]
+                    tables_being_considered.append(curr_table)
+                    # Build nice error message
+                    raise TableError(tuple(tables_being_considered), original_error.message)
+                
+            tables_done.append(curr_table)
+
+# --------------------- Exception Classes --------------------
+
+
+#-------------------------
+# TableError
+#--------------
+
+class TableError(Exception):
+    '''
+    Exception raised for tables missing in Queries subdir,
+    or mutually required tables. 
+
+    Attributes:
+        tuple of two table names involved in an error
+        message -- explanation of the error
+    '''
+
+    def __init__(self, table_tuple, message):
+        self.table_tuple = table_tuple
+        self._message_fragment = message
+        super().__init__(self.message)
+        
+    
+    @property
+    def message(self):
+        return f"{self.table_tuple}: {self._message_fragment}"
+
+    
+#-------------------------
+# InternalTableError 
+#--------------
+    
+class InternalTableError(Exception):
+
+    def __init__(self, table_name, message, implicated_tables=[]):
+        self.table_name = table_name
+        self._message_fragment = message
+        self.implicated_tables = implicated_tables
+        super().__init__(self.message)
+
+    @property
+    def message(self):
+        return self._message_fragment
             
 # -------------------- Main --------------------
 

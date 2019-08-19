@@ -4,10 +4,11 @@ Created on Aug 15, 2019
 @author: paepcke
 '''
 import unittest
-from query_sorter import QuerySorter
+from query_sorter import QuerySorter, TableError
 
 TEST_ALL = True
 #TEST_ALL = False
+
 
 class QuerySorterTester(unittest.TestCase):
 
@@ -43,11 +44,18 @@ class QuerySorterTester(unittest.TestCase):
         # Test table without dependencies:
         precedence_dict = {'Terms': [], 'CourseEnrollment': ['Terms']}
 
-        free_list = self.sorter.resolve_dependencies(precedence_dict, ['Terms'], [])
-        self.assertCountEqual(free_list, ['Terms'])
+        ordered_list = self.sorter.detect_mutual_table_dependencies(precedence_dict)
+        self.assertCountEqual(ordered_list, ['Terms', 'CourseEnrollment'])
+        
+        # Dependency on non-existing table:
+        precedence_dict = {'Terms': ['Student'], 'CourseEnrollment': ['Terms']}
 
-        free_list = self.sorter.resolve_dependencies(precedence_dict, ['CourseEnrollment'], [])
-        self.assertCountEqual(free_list, ['Terms', 'CourseEnrollment'])
+        try:
+            ordered_list = self.sorter.detect_mutual_table_dependencies(precedence_dict)
+        except TableError as e:
+            #print(e.message())
+            self.assertEqual(e.message, "('CourseEnrollment', 'Terms', 'CourseEnrollment'): Missing table file Student.sql in Queries directory")
+
 
     #-------------------------
     # testSort 
@@ -64,12 +72,12 @@ class QuerySorterTester(unittest.TestCase):
         
         # Test loop detection:
         precedence_dict = {'Terms': ['CourseEnrollment'], 'CourseEnrollment': ['Terms']}
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TableError):
             ordered_table_list = self.sorter.sort(precedence_dict)
         
         # Test unresolved requirement-detection:
         precedence_dict = {'Terms': [], 'CourseEnrollment': ['NoTable']}
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TableError):
             ordered_table_list = self.sorter.sort(precedence_dict)
             
     #-------------------------
@@ -81,25 +89,24 @@ class QuerySorterTester(unittest.TestCase):
         # No loop:
         precedence_dict = {'Terms': [], 'CourseEnrollment': ['Terms']}
         self.assertTrue(self.sorter.detect_mutual_table_dependencies(precedence_dict))
-        
+         
         # Simple loop, immediately visible:
         precedence_dict = {'Terms': ['CourseEnrollment'], 'CourseEnrollment': ['Terms']}
         try:
             self.sorter.detect_mutual_table_dependencies(precedence_dict)
             self.fail("Expected ValueError, which was not raised.")
-        except ValueError as e:
+        except TableError as e:
             # Ensure there is an explanatory error text:
-            self.assertCountEqual(e.args, (('Terms', 'CourseEnrollment'), ": tables are mutually dependent."))
-
-            
+            self.assertEqual(e.table_tuple, ('CourseEnrollment', 'Terms', 'CourseEnrollment'))
+                
         # Indirect dependency: A dependsOn B, which dependsOn C, which dependsOn A:
         precedence_dict = {'Terms': ['CourseEnrollment'], 'CourseEnrollment': ['Student'], 'Student' : ['Terms']}
         try:
             self.sorter.detect_mutual_table_dependencies(precedence_dict)
             self.fail("Expected ValueError, which was not raised.")
-        except ValueError as e:
+        except TableError as e:
             # Ensure there is an explanatory error text:
-            self.assertCountEqual(e.args, (('Terms', 'Student'), ": tables are mutually dependent."))
+            self.assertCountEqual(e.table_tuple, ('Student', 'Terms', 'CourseEnrollment', 'Student'))
             
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']
