@@ -386,7 +386,7 @@ class AuxTableCopier(object):
         row_iterator = self.db.query(rows_retrieve_stmt)
         
         with open(file_name, 'w') as fd:
-            csv_writer = csv.writer(fd, delimiter=',')
+            csv_writer = csv.writer(fd, delimiter=',', quoting=csv.QUOTE_ALL)
             # Write header line:
             csv_writer.writerow(col_name_arr)
             for row in row_iterator:

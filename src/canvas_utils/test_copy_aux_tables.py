@@ -412,11 +412,12 @@ class AuxTableCopyTester(unittest.TestCase):
         with open(dest_file, 'r') as fd:
             file_content = fd.read()
             self.assertEqual(file_content,
-                             '''id,var1,var2,var3
-1,10,20,"ten,twenty"
-2,30,40,thirty/forty
-3,50,60,fifty
-''')
+                             '''"id","var1","var2","var3"
+"1","10","20","ten,twenty"
+"2","30","40","thirty/forty"
+"3","50","60","fifty"
+'''
+)
     
     #-------------------------
     # testCopyMultipleTables 
@@ -446,10 +447,10 @@ class AuxTableCopyTester(unittest.TestCase):
         with open('/tmp/Unittest1.csv', 'r') as fd:
             content = fd.read()
         self.assertEqual(content,
-                        '''var1,var2,var3
-This is text.,One varchar,10.5
-"More, text",Another varchar,20.5
-"""Text"" galore",Lots of varchar,30.5
+                        '''"var1","var2","var3"
+"This is text.","One varchar","10.5"
+"More, text","Another varchar","20.5"
+"""Text"" galore","Lots of varchar","30.5"
 ''')
             
 # ----------------------------------- Utilities -------------
