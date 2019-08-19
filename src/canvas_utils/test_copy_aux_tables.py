@@ -104,6 +104,7 @@ class AuxTableCopyTester(unittest.TestCase):
                 # Create the db to play in:
                 try:
                     db.execute(f"CREATE DATABASE {db_name};")
+                    cls.db_name = db_name
                 except Exception as e:
                     raise RuntimeError(f"Cannot create temporary db '{db_name}': {repr(e)}")
             finally:
@@ -117,11 +118,25 @@ class AuxTableCopyTester(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         super(AuxTableCopyTester, cls).tearDownClass()
+        if cls.test_host == 'localhost':
+            return
+        
+        db = None
         try:
+            # Remove the unittest db we created:
+            print(f"Removing database '{cls.db_name}'...")
+            db = MySQLDB(user=cls.user, 
+                         passwd=cls.mysql_pwd, 
+                         db='information_schema', 
+                         host=cls.test_host)
+            db.execute(f"DROP DATABASE {cls.db_name}")
+            print(print(f"Done removing database '{cls.db_name}'..."))
             #AuxTableCopyTester.copier_obj.close()
             pass
-        except Exception:
-            pass
+        finally:
+            if db is not None:
+                db.close()
+            
 
     #-------------------------
     # setUp 

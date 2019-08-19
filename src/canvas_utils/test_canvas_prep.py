@@ -15,8 +15,8 @@ import shutil
 from canvas_prep import CanvasPrep
 
 
-TEST_ALL = True
-#TEST_ALL = False
+#TEST_ALL = True
+TEST_ALL = False
 
 class CanvasUtilsTests(unittest.TestCase):
 
@@ -190,7 +190,7 @@ class CanvasUtilsTests(unittest.TestCase):
     # testSaveTables
     #-------------------    
     
-    @unittest.skipIf(not TEST_ALL, 'Temporarily skipped')    
+    #*****@unittest.skipIf(not TEST_ALL, 'Temporarily skipped')    
     def testSaveTables(self):
 
         try:
