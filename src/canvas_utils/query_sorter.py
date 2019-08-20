@@ -328,7 +328,8 @@ class QuerySorter(object):
                     tables_being_considered.append(curr_table)
                     # Build nice error message
                     raise TableError(tuple(tables_being_considered), original_error.message)
-                
+            else:
+                tables_done.append(curr_table)    
             tables_done.append(curr_table)
 
 # --------------------- Exception Classes --------------------
