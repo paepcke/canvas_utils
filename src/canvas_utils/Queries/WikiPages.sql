@@ -22,7 +22,7 @@ SELECT
     view_count,
     editing_roles
   FROM
-   wiki_page_fact LEFT JOIN wiki_page_dim
+   canvasdata_prd.wiki_page_fact LEFT JOIN wiki_page_dim
     ON wiki_page_fact.wiki_page_id = wiki_page_dim.id
    WHERE workflow_state = 'active';
 
