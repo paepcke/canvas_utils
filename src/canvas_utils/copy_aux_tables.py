@@ -301,7 +301,7 @@ class AuxTableCopier(object):
         '''
         
         try:
-            if self.db is not None and not self.db.isOpen():
+            if self.db is None or not self.db.isOpen():
                 self.connect_to_src_db(self.user, 
                                        self.host, 
                                        self.pwd, 
