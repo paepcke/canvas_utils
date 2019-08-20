@@ -12,7 +12,7 @@ CREATE TABLE GradingProcess (
     grade_numeric double,
     grading_type varchar(256),
     grade_state varchar(36),
-    group_assignment_final_score double,
+#    group_assignment_final_score double,
     group_assignment_weight double,
     points_possible double
     ) engine=MyISAM;
@@ -37,7 +37,7 @@ SELECT CourseAssignments.account_id,
        grade_numeric,
        grading_type,
        grade_state,
-       group_assignment_final_score,
+#       group_assignment_final_score,
        group_assignment_weight,
        CourseAssignments.points_possible
  FROM CourseAssignments LEFT JOIN AssignmentSubmissions
