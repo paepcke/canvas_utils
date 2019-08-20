@@ -291,7 +291,7 @@ class QuerySorter(object):
             if curr_table in tables_done:
                 # Satisfied this table's dependencies
                 # earlier, or has none:
-                return tables_done
+                continue
             
             if curr_table in tables_being_considered:
                 raise InternalTableError(curr_table, "Mutual load order dependency")
