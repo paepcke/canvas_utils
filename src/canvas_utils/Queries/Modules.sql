@@ -10,7 +10,7 @@ CREATE TABLE Modules (
     enrollment_term_id bigint,    # module_fact
     term_name varchar(20),        # Term
     wiki_id bigint,               # wiki_dim
-    wiki_title text COLLATE utf8mb4_unicode_ci,  # wiki_dim
+    wiki_title text COLLATE utf8mb4_unicode_ci  # wiki_dim
     ) ENGINE=MyIsam;
 
 USE canvasdata_prd;
