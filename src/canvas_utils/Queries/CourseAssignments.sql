@@ -64,7 +64,11 @@ USE canvasdata_prd;
 CALL createIndexIfNotExists('id_idx', 'quiz_fact', 'quiz_id', NULL);
 CALL createIndexIfNotExists('course_id_idx', 'quiz_fact', 'course_id', NULL);
 
-CREATE TEMPORARY TABLE IF NOT EXISTS QuizDimFact
+# A temporary table, but an actual MySQL TEMPORARY
+# did not work with the createIndexIfNotExists()
+# procedure below:
+
+CREATE TABLE IF NOT EXISTS QuizDimFact
 SELECT quiz_dim.id,
        quiz_dim.quiz_type,
        quiz_dim.name,
@@ -163,3 +167,6 @@ DELETE CourseAssignments
 FROM CourseAssignments LEFT JOIN canvasdata_prd.course_dim
     ON course_id = id
  WHERE workflow_state != 'available';
+
+# Clean up the 'temp' table
+DROP TABLE IF EXISTS QuizDimFact;
