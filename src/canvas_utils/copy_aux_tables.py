@@ -312,11 +312,11 @@ class AuxTableCopier(object):
             table_schemas = [self.populate_table_schema(table_name) for table_name in table_names]
             for table_schema in table_schemas:
                 table_name = table_schema.table_name
-                self.log_info(f"Copying {table_name} to {self.dest_dir}/{table_name}.csv...")
+                self.log_info(f"Copying {table_name} to {self.dest_dir}{table_name}.csv...")
                 self.copy_one_table_to_csv(table_schema)
-                self.log_info(f"Done copying {table_schema}.{table_name}.")
+                self.log_info(f"Done copying {table_schema.table_name}.")
 
-                self.log_info(f"Writing {table_name}'s schema to {self.dest_dir}/{table_name}_schema.sql")
+                self.log_info(f"Writing {table_name}'s schema to {self.dest_dir}{table_name}_schema.sql")
                 self.write_table_schema(table_schema)
                 self.log_info(f"Done writing {table_name}'s schema to {self.dest_dir}/{table_name}_schema.sql")
                 
@@ -407,7 +407,7 @@ class AuxTableCopier(object):
         @type table_name: str
         @return: a Schema instance that describes the table
         @rtype: Schema
-        @raise RuntimeErrer: when MySQL database cannot be contacted. 
+        @raise RuntimeError: when MySQL database cannot be contacted. 
         '''
         table_metadata_cmd = f'''SELECT column_name, data_type, character_maximum_length, column_default, ordinal_position, extra 
                                    FROM information_schema.COLUMNS 
