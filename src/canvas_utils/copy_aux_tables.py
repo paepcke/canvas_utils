@@ -312,11 +312,11 @@ class AuxTableCopier(object):
             table_schemas = [self.populate_table_schema(table_name) for table_name in table_names]
             for table_schema in table_schemas:
                 table_name = table_schema.table_name
-                self.log_info(f"Copying {table_name} to {self.dest_dir}{table_name}.csv...")
+                self.log_info(f"Copying {table_name} to {self.dest_dir}/{table_name}.csv...")
                 self.copy_one_table_to_csv(table_schema)
                 self.log_info(f"Done copying {table_schema.table_name}.")
 
-                self.log_info(f"Writing {table_name}'s schema to {self.dest_dir}{table_name}_schema.sql")
+                self.log_info(f"Writing {table_name}'s schema to {self.dest_dir}/{table_name}_schema.sql")
                 self.write_table_schema(table_schema)
                 self.log_info(f"Done writing {table_name}'s schema to {self.dest_dir}/{table_name}_schema.sql")
                 
