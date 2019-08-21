@@ -93,7 +93,6 @@ class AuxTableCopier(object):
                 AuxTableCopier.canvas_db_aux = 'Unittest'
             else:
                 AuxTableCopier.canvas_db_aux = unittest_db_name
-            
         
         self.setup_logging()
         self.logger.setLevel(logging_level)
@@ -156,7 +155,7 @@ class AuxTableCopier(object):
         # a list of table names. If tables is an empty list,
         # nothing will be copied: 
         
-        if tables is None:
+        if tables is None or len(tables) == 0:
             self.tables = CanvasPrep.create_table_name_array() 
         else:
             # Note: could be empty table, in which
@@ -579,7 +578,9 @@ class AuxTableCopier(object):
     #--------------
     
     def file_nm_from_tble(self, tbl_nm):
-        return os.path.join(self.dest_dir, tbl_nm) + '.sql' if self.copy_format == 'sql' else '.csv'
+        return os.path.join(self.dest_dir, tbl_nm) + '.sql' \
+            if self.copy_format == 'sql' \
+            else os.path.join(self.dest_dir, tbl_nm) + '.csv'
     
     #-------------------------
     # setup_logging 
@@ -1087,7 +1088,7 @@ if __name__ == '__main__':
 
     parser.add_argument('-t', '--table',
                         nargs='+',
-                        help='Name of specific table to create. Can be repeated if more than one table; default: all tables in aux',
+                        help='Name of one or more specific table(s) to copy. Default: all tables in aux',
                         default=[]
                         )
     
