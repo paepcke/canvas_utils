@@ -488,7 +488,7 @@ class CanvasPrep(object):
         
     def create_tables(self, completed_tables=[]):
         '''
-        Runs through the tl_creation_paths list of table
+        Runs through the tbl_creation_paths list of table
         creation .sql files, and executes each. 
         
         The completed_tables parameter is list of tables
@@ -505,6 +505,9 @@ class CanvasPrep(object):
         for tbl_file_path in CanvasPrep.tbl_creation_paths:
             tbl_nm = self.tbl_nm_from_file(tbl_file_path)
             
+            # Special handlers would be for table creations that
+            # cannot be expressed in sql alone. Currently there
+            # are no such cases:
             special_handler = self.special_tables.get(tbl_nm, None)
             if special_handler is not None:
                 self.handle_complicated_case(tbl_file_path, tbl_nm)
@@ -537,8 +540,40 @@ class CanvasPrep(object):
                                    (tbl_nm, str(errors))
                                    )
             completed_tables.append(tbl_nm)
+            # Make entry in table_refresh_log table:
+            self.log_table_creation(tbl_nm, datetime.datetime.now().isoformat())
             self.log_info('Done working on table %s' % tbl_nm)
         return completed_tables
+        
+    #-------------------------
+    # log_table_creation 
+    #--------------
+    
+    def log_table_creation(self, tbl_nm, timestamp):
+        '''
+        Make an entry in table table_refresh_log, indicating
+        that the given table name was refreshed at the given
+        date and time.
+        
+        @param tbl_nm: name of table that was refreshed
+        @type tbl_nm: str
+        @param timestamp: date/time of completion
+        @type timestamp: str
+        '''
+        
+        # Does the table exist?
+        self.db.query(f'''SELECT table_name, table_schema
+                            FROM information_schema.tables
+                           WHERE table_schema = {CanvasPrep.canvas_db_aux};
+        ''')
+        if self.db.result_count() == 0:
+            # Log table doesn't exist yet.
+            # Create it:
+            self.db.execute("CREATE TABLE table_refresh_log(tbl_name varchar(255), timestamp varchar(50)")
+            
+        # Make the entry:
+        self.db.insert('table_refresh_log', {'tbl_name' : tbl_nm,
+                                             'timestamp' : timestamp})
         
     #-------------------------
     # pull_explore_courses 
