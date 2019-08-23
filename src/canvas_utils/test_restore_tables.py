@@ -5,6 +5,7 @@ Created on May 1, 2019
 '''
 import configparser
 import datetime
+import getpass
 import os
 import shutil
 import unittest
@@ -13,6 +14,7 @@ from pymysql_utils.pymysql_utils import MySQLDB
 
 from canvas_prep import CanvasPrep
 from restore_tables import TableRestorer
+from unittest_db_finder import UnittestDbFinder
 
 
 TEST_ALL = True
@@ -47,12 +49,8 @@ class CanvasRestoreTablesTests(unittest.TestCase):
         config = configparser.ConfigParser()
         config.read(conf_file_path)
         test_host       = cls.test_host = config['TESTMACHINE']['mysql_host']
-        user            = cls.user = config['TESTMACHINE']['mysql_user']
-
-        if test_host == 'localhost':
-            mysql_pwd = cls.mysql_pwd = ''
-        else:
-            mysql_pwd = cls.mysql_pwd = None
+        cls.user = config['TESTMACHINE']['mysql_user']
+        cls.canvas_pwd_file = config['DATABASE']['canvas_pwd_file']
 
         # If not working on localhost, where we expect a db
         # 'Unittest" Ensure there is a unittest db for us to work in.
@@ -61,46 +59,18 @@ class CanvasRestoreTablesTests(unittest.TestCase):
         if test_host == 'localhost':
             db_name = 'Unittest'
         else:
-            unittest_db_nm = 'unittests_'
-            nm_indx = 0
-            # Tell CanvasPrep to initially log into information_schema,
-            # until we know which unittest_xx we'll use. If user is
-            # unittest we don't use a pwd for the MySQL db, b/c that
-            # user is isolated. For any other user we do the usual
-            # ~/.ssh/... lookup:
-            restore_obj = TableRestorer(user=user, 
-                                        host=test_host, 
-                                        target_db='information_schema',
-                                        pwd=mysql_pwd,
-                                        unittests=True)
+            db = None
+            db = MySQLDB(host=test_host,
+                         user=cls.user,
+                         passwd=cls.get_db_pwd(),
+                         )
             try:
-                db = restore_obj.db_obj
-                restore_obj.log_info("Looking for unused database name for unittest activity...")
-                while True:
-                    nm_indx += 1
-                    db_name = unittest_db_nm + str(nm_indx)
-                    db_exists_cmd = f'''
-                                     SELECT COUNT(*) AS num_dbs 
-                                       FROM information_schema.schemata
-                                      WHERE schema_name = '{db_name}';
-                                     '''
-                    try:
-                        num_existing = db.query(db_exists_cmd).next()
-                        if num_existing == 0:
-                            # Found a db name that doesn't exist:
-                            break
-                    except Exception as e:
-                        restore_obj.close()
-                        raise RuntimeError(f"Cannot probe for existing db '{db_name}': {repr(e)}")
-            
-                restore_obj.log_info(f"Creating database {db_name} for unittest activity...")
-                # Create the db to play in:
-                try:
-                    db.execute(f"CREATE DATABASE {db_name};")
-                except Exception as e:
-                    raise RuntimeError(f"Cannot create temporary db '{db_name}': {repr(e)}")
+                db_name = UnittestDbFinder(db).db_name
+            except Exception as e:
+                raise AssertionError(f"Cannot open db to find a unittest db: {repr(e)}")
             finally:
-                restore_obj.close()
+                if db is not None:
+                    db.close()
         
         CanvasRestoreTablesTests.unittests_db_nm = db_name
        
@@ -117,13 +87,18 @@ class CanvasRestoreTablesTests(unittest.TestCase):
         
         if cls.test_host == 'localhost':
             return
-        if isinstance(CanvasRestoreTablesTests.restore_obj, TableRestorer):
-            CanvasRestoreTablesTests.restore_obj.close()
+        
+        try:
+            if isinstance(CanvasRestoreTablesTests.restore_obj, TableRestorer):
+                CanvasRestoreTablesTests.restore_obj.close()
+        except AttributeError:
+            # No restore_obj exists yet:
+            pass
             
         restore_obj = TableRestorer(host=cls.test_host,
                                     user=cls.user,
                                     target_db='information_schema',
-                                    pwd=cls.mysql_pwd,
+                                    pwd=cls.get_db_pwd(),
                                     unittests=True
                                     )
         db = restore_obj.db_obj
@@ -144,12 +119,15 @@ class CanvasRestoreTablesTests(unittest.TestCase):
     def setUp(self):
         unittest.TestCase.setUp(self)
         cls = CanvasRestoreTablesTests
-        self.restore_obj = TableRestorer(host=cls.test_host,
-                                         user=cls.user,
-                                         target_db=cls.unittests_db_nm,
-                                         pwd=cls.mysql_pwd,
-                                         unittests=True
-                                         )
+        try:
+            self.restore_obj = TableRestorer(host=cls.test_host,
+                                             user=cls.user,
+                                             target_db=cls.unittests_db_nm,
+                                             pwd=cls.get_db_pwd(),
+                                             unittests=True
+                                             )
+        except Exception as e:
+            raise ValueError(f"Error opening restorer: {repr(e)}")
         # To give class obj access to the db:
         cls.restore_obj = self.restore_obj
         
@@ -359,6 +337,39 @@ class CanvasRestoreTablesTests(unittest.TestCase):
     # ------------------------------- Utilities -------------------------
 
     #-------------------------
+    # get_db_pwd
+    #--------------
+
+    @classmethod
+    def get_db_pwd(cls):
+        '''
+        Find appropriate password for logging into MySQL. Normally
+        a file is expected in Class.canvas_pwd_file, and
+        the pwd is taken from there.
+        
+        Password convention is different from 
+        normal operation: If passed-in pwd is None
+        and host is localhost, we assume that there
+        is a user 'unittest' without a pwd.
+        
+        '''
+        
+        if cls.test_host == 'localhost':
+            return ''
+        
+        HOME = os.getenv('HOME')
+        if HOME is not None:
+            default_pwd_file = os.path.join(HOME, '.ssh', cls.canvas_pwd_file)
+            if os.path.exists(default_pwd_file):
+                with open(default_pwd_file, 'r') as fd:
+                    pwd = fd.readline().strip()
+                    return pwd
+            
+        # Ask on console:
+        pwd = getpass.getpass("Password for Canvas database: ")
+        return pwd
+
+    #-------------------------
     # log_into_mysql 
     #--------------
         
@@ -395,7 +406,7 @@ class CanvasRestoreTablesTests(unittest.TestCase):
     
     def check_table_existence(self, db, _db_schema, num_expected_tables=0):
         # Get remaining tables:
-        table_names = self.get_tbl_names_in_schema(db, _db_schema)
+        table_names = self.getTblNamesInSchema(db, _db_schema)
         
         self.assertEqual(len(table_names), num_expected_tables)
         
@@ -408,15 +419,15 @@ class CanvasRestoreTablesTests(unittest.TestCase):
         Find all tables in the Unittest db,
         and remove them.
         '''
-        tbl_names = self.get_tbl_names_in_schema(self.db, self.db_name)
+        tbl_names = self.getTblNamesInSchema(self.db, self.db_name)
         for tbl_name in tbl_names:
             self.db.dropTable(tbl_name)
     
     #------------------------------------
-    # get_tbl_names_in_schema 
+    # getTblNamesInSchema 
     #-------------------    
     
-    def get_tbl_names_in_schema(self, db, db_schema_name):
+    def getTblNamesInSchema(self, db, db_schema_name):
         '''
         Given a db schema ('database name' in MySQL parlance),
         return a list of all tables in that db.

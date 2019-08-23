@@ -16,6 +16,7 @@ from pymysql_utils.pymysql_utils import MySQLDB
 
 from copy_aux_tables import AuxTableCopier
 from copy_aux_tables import Schema
+from unittest_db_finder import UnittestDbFinder
 
 
 #from copy_aux_tables import SchemaColumn
@@ -26,11 +27,6 @@ TEST_ALL = True
 
 class AuxTableCopyTester(unittest.TestCase):
 
-    #test_host  = 'canvasdata-prd-db1.ci6ilhrc8rxe.us-west-1.rds.amazonaws.com'
-    #test_host  = 'localhost'
-    #mysql_user = 'canvasdata_aux'
-    #db         = None
-    
     #------------------------------------
     # setUpClass 
     #-------------------    
@@ -54,6 +50,7 @@ class AuxTableCopyTester(unittest.TestCase):
         config.read(setup_file_name)
         test_host       = cls.test_host = config['TESTMACHINE']['mysql_host']
         user            = cls.user = config['TESTMACHINE']['mysql_user']
+        
 
         cls.test_host = test_host
         cls.user      = user
@@ -65,7 +62,6 @@ class AuxTableCopyTester(unittest.TestCase):
             mysql_pwd = cls.mysql_pwd = cls.get_db_pwd()
 
         cls.mysql_pwd = mysql_pwd
-
         
         db = AuxTableCopyTester.db = MySQLDB(user=user, 
                                              passwd=mysql_pwd, 
@@ -79,36 +75,7 @@ class AuxTableCopyTester(unittest.TestCase):
             cls.db_name = 'Unittest'
             cls.mysql_pwd = ''
         else:
-            unittest_db_nm = 'unittests_'
-            nm_indx = 0
-            try:
-                print("Looking for unused database name for unittest activity...")
-                while True:
-                    nm_indx += 1
-                    db_name = unittest_db_nm + str(nm_indx)
-                    db_exists_cmd = f'''
-                                     SELECT COUNT(*) AS num_dbs 
-                                       FROM information_schema.schemata
-                                      WHERE schema_name = '{db_name}';
-                                     '''
-                    try:
-                        num_existing = db.query(db_exists_cmd).next()
-                        if num_existing == 0:
-                            # Found a db name that doesn't exist:
-                            break
-                    except Exception as e:
-                        db.close()
-                        raise RuntimeError(f"Cannot probe for existing db '{db_name}': {repr(e)}")
-            
-                print(f"Creating database {db_name} for unittest activity...")
-                # Create the db to play in:
-                try:
-                    db.execute(f"CREATE DATABASE {db_name};")
-                    cls.db_name = db_name
-                except Exception as e:
-                    raise RuntimeError(f"Cannot create temporary db '{db_name}': {repr(e)}")
-            finally:
-                cls.db_name = db_name
+            cls.db_name = UnittestDbFinder(db).db_name
         db.close()
         
     #-------------------------
@@ -422,7 +389,10 @@ class AuxTableCopyTester(unittest.TestCase):
         self.assertEqual(dest_file, '/tmp/Unittest.csv')
         
         # Do the copying:
-        self.copier.copy_one_table_to_csv()
+        try:
+            self.copier.copy_one_table_to_csv()
+        except Exception as e:
+            print(f"Could not copy table: {repr(e)}")
         
         with open(dest_file, 'r') as fd:
             file_content = fd.read()
@@ -454,7 +424,7 @@ class AuxTableCopyTester(unittest.TestCase):
                            ('var1', 'var2', 'var3'),
                            [("This is text.","One varchar", 10.5),
                             ("More, text",'Another varchar', 20.5),
-                            ('"Text" galore',"Lots of varchar",30.5),
+                            ("'Text' galore","Lots of varchar",30.5),
                             ]
                            )
         
@@ -465,7 +435,7 @@ class AuxTableCopyTester(unittest.TestCase):
                         '''"var1","var2","var3"
 "This is text.","One varchar","10.5"
 "More, text","Another varchar","20.5"
-"""Text"" galore","Lots of varchar","30.5"
+"'Text' galore","Lots of varchar","30.5"
 ''')
             
 # ----------------------------------- Utilities -------------
@@ -590,15 +560,15 @@ class AuxTableCopyTester(unittest.TestCase):
         @param db: db object
         @type db: pymysql_utils
         '''
-        tbl_names = self.get_tbl_names_in_schema(db, self.db_name)
+        tbl_names = self.getTblNamesInSchema(db, self.db_name)
         for tbl_name in tbl_names:
             db.dropTable(tbl_name)
         
     #------------------------------------
-    # get_tbl_names_in_schema 
+    # getTblNamesInSchema 
     #-------------------    
     
-    def get_tbl_names_in_schema(self, db, db_schema_name):
+    def getTblNamesInSchema(self, db, db_schema_name):
         '''
         Given a db schema ('database name' in MySQL parlance),
         return a list of all tables in that db.

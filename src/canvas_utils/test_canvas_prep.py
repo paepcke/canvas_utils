@@ -5,14 +5,17 @@ Created on May 1, 2019
 '''
 import configparser
 import datetime
+import getpass
 import os
 import re
+import shutil
 import time
 import unittest
 
-import shutil
+from pymysql_utils.pymysql_utils import MySQLDB
 
 from canvas_prep import CanvasPrep
+from unittest_db_finder import UnittestDbFinder
 
 
 TEST_ALL = True
@@ -42,11 +45,7 @@ class CanvasUtilsTests(unittest.TestCase):
         config.read(os.path.join(os.path.dirname(__file__), '../../setup.cfg'))
         test_host       = cls.test_host = config['TESTMACHINE']['mysql_host']
         user            = cls.user = config['TESTMACHINE']['mysql_user']
-
-        if test_host == 'localhost':
-            mysql_pwd = cls.mysql_pwd = ''
-        else:
-            mysql_pwd = cls.mysql_pwd = None
+        cls.canvas_pwd_file = config['DATABASE']['canvas_pwd_file']
 
         # If not working on localhost, where we expect a db
         # 'Unittest" Ensure there is a unittest db for us to work in.
@@ -55,48 +54,22 @@ class CanvasUtilsTests(unittest.TestCase):
         if test_host == 'localhost':
             db_name = 'Unittest'
         else:
-            unittest_db_nm = 'unittests_'
-            nm_indx = 0
-            # Tell CanvasPrep to initially log into information_schema,
-            # until we know which unittest_xx we'll use. If user is
-            # unittest we don't use a pwd for the MySQL db, b/c that
-            # user is isolated. For any other user we do the usual
-            # ~/.ssh/... lookup:
-            prep_obj = CanvasPrep(user=user, 
-                                  host=test_host, 
-                                  target_db='information_schema',
-                                  pwd=mysql_pwd,
-                                  unittests=True)
+            db = None
+            db = MySQLDB(host=test_host,
+                         user=cls.user,
+                         passwd=cls.get_db_pwd()
+                         )
             try:
-                db = prep_obj.db
-                prep_obj.log_info("Looking for unused database name for unittest activity...")
-                while True:
-                    nm_indx += 1
-                    db_name = unittest_db_nm + str(nm_indx)
-                    db_exists_cmd = f'''
-                                     SELECT COUNT(*) AS num_dbs 
-                                       FROM information_schema.schemata
-                                      WHERE schema_name = '{db_name}';
-                                     '''
-                    try:
-                        num_existing = db.query(db_exists_cmd).next()
-                        if num_existing == 0:
-                            # Found a db name that doesn't exist:
-                            break
-                    except Exception as e:
-                        prep_obj.close()
-                        raise RuntimeError(f"Cannot probe for existing db '{db_name}': {repr(e)}")
-            
-                prep_obj.log_info(f"Creating database {db_name} for unittest activity...")
-                # Create the db to play in:
-                try:
-                    db.execute(f"CREATE DATABASE {db_name};")
-                except Exception as e:
-                    raise RuntimeError(f"Cannot create temporary db '{db_name}': {repr(e)}")
+                db_name = UnittestDbFinder(db).db_name
+            except Exception as e:
+                raise AssertionError(f"Cannot open db to find a unittest db: {repr(e)}")
             finally:
-                prep_obj.close()
+                if db is not None:
+                    db.close()
         
+        CanvasUtilsTests.test_host = test_host
         CanvasUtilsTests.unittests_db_nm = db_name
+        CanvasUtilsTests.user = user
         
     #------------------------------------
     # tearDownClass 
@@ -117,7 +90,7 @@ class CanvasUtilsTests(unittest.TestCase):
         prep_obj = CanvasPrep(host=cls.test_host,
                               user=cls.user,
                               target_db=db_name,
-                              pwd=cls.mysql_pwd,
+                              pwd=cls.get_db_pwd(),
                               unittests=True
                               )
 
@@ -147,7 +120,7 @@ class CanvasUtilsTests(unittest.TestCase):
         self.prep_obj = CanvasPrep(user=self.user, 
                               host=self.test_host, 
                               target_db=self.db_schema,
-                              pwd=CanvasUtilsTests.mysql_pwd,
+                              pwd=CanvasUtilsTests.get_db_pwd(),
                               unittests=True)
 
     #-------------------------
@@ -206,7 +179,7 @@ class CanvasUtilsTests(unittest.TestCase):
             # Find all tables in the unittest db
             # (likely only the one we just created):
             
-            table_names = self.get_tbl_names_in_schema(db, self.db_schema)
+            table_names = self.getTblNamesInSchema(db, self.db_schema)
             
             # But the tbl we created must indeed be there:
             self.assertIn(test_table_name1, table_names)
@@ -219,7 +192,7 @@ class CanvasUtilsTests(unittest.TestCase):
             # Should include the new backup table, but
             # not the original table:
             
-            table_names = self.get_tbl_names_in_schema(db, self.db_schema)
+            table_names = self.getTblNamesInSchema(db, self.db_schema)
             
             # Find our test table in the list of names:            
             name_list = self.find_backup_table_names(table_names, 
@@ -238,7 +211,7 @@ class CanvasUtilsTests(unittest.TestCase):
             db.createTable(test_table_name3, {'col1': 'int'}, temporary=False)
             
             _datetime_obj_used1_2 = self.prep_obj.backup_tables([test_table_name2, test_table_name3])
-            table_names = self.get_tbl_names_in_schema(db, self.db_schema)
+            table_names = self.getTblNamesInSchema(db, self.db_schema)
             
             # Find our test table in the list of names:            
             name_list = self.find_backup_table_names(table_names) 
@@ -294,7 +267,7 @@ class CanvasUtilsTests(unittest.TestCase):
         dt_objs_list  = [datetime_obj1_1, datetime_obj1_2, datetime_obj1_3_2]
         
         # Make sure the backups are there:
-        table_names = self.get_tbl_names_in_schema(db, self.db_schema)
+        table_names = self.getTblNamesInSchema(db, self.db_schema)
         for backup_tbl_name in table_names:
             (tbl_root, _dt_str, dt_obj) = self.prep_obj.backup_table_name_components(backup_tbl_name)
             self.assertIn(tbl_root, table_names_list)
@@ -307,7 +280,7 @@ class CanvasUtilsTests(unittest.TestCase):
         
         # Now remove the backups for table 1, keeping the 2 latest ones.
         # So only the first backup should be removed:
-        self.prep_obj.remove_backup_tables(test_table_name1, num_to_keep=2)
+        self.prep_obj.remove_backup_tables(test_table_name1, num_to_keep=2) #<----- Takes away 2, instead of 1
         
         # Should have tbl1, tbl2, 2 tbl1 backups, and one tbl2 backup:
         self.check_table_existence(db, self.db_schema, num_expected_tables=5)
@@ -363,14 +336,14 @@ class CanvasUtilsTests(unittest.TestCase):
         
         db.createTable(test_table_name, {'col1': 'int'}, temporary=False)
         
-        table_names_now = self.get_tbl_names_in_schema(db, self.db_schema)
+        table_names_now = self.getTblNamesInSchema(db, self.db_schema)
         self.assertIn(test_table_name, table_names_now)
         
         # Now do the backup of this table:
         the_dt_obj = self.prep_obj.backup_tables(test_table_name)
         
         # Get list of tables again; should be a single backup table name:
-        table_name_now = self.get_tbl_names_in_schema(db, self.db_schema)[0]
+        table_name_now = self.getTblNamesInSchema(db, self.db_schema)[0]
         (root_nm, _dt_str, dt_obj) = self.prep_obj.backup_table_name_components(table_name_now)
         self.assertEqual(root_nm, test_table_name)
         self.assertEqual(dt_obj, the_dt_obj)
@@ -379,7 +352,7 @@ class CanvasUtilsTests(unittest.TestCase):
         self.prep_obj.restore_from_backup(test_table_name, self.db_schema)
         
         # Is the table back?
-        table_names_now = self.get_tbl_names_in_schema(db, self.db_schema)
+        table_names_now = self.getTblNamesInSchema(db, self.db_schema)
         self.assertIn(test_table_name, table_names_now)
         self.assertEqual(len(table_names_now), 1)
         
@@ -396,13 +369,46 @@ class CanvasUtilsTests(unittest.TestCase):
         self.prep_obj.restore_from_backup(test_table_name, self.db_schema)
         
         # Is the table back?
-        table_names_now = self.get_tbl_names_in_schema(db, self.db_schema)
+        table_names_now = self.getTblNamesInSchema(db, self.db_schema)
         self.assertIn(test_table_name, table_names_now)
         self.assertEqual(len(table_names_now), 2)
         res = db.query(f"SELECT COL1 FROM {test_table_name} LIMIT 1;")
         self.assertEqual(res.next(), 10)
     
     # ------------------------------- Utilities -------------------------
+
+    #-------------------------
+    # get_db_pwd
+    #--------------
+
+    @classmethod
+    def get_db_pwd(cls):
+        '''
+        Find appropriate password for logging into MySQL. Normally
+        a file is expected in CanvasPrep.canvas_pwd_file, and
+        the pwd is taken from there.
+        
+        Password convention is different from 
+        normal operation: If passed-in pwd is None
+        and host is localhost, we assume that there
+        is a user 'unittest' without a pwd.
+        
+        '''
+        
+        if cls.test_host == 'localhost':
+            return ''
+        
+        HOME = os.getenv('HOME')
+        if HOME is not None:
+            default_pwd_file = os.path.join(HOME, '.ssh', cls.canvas_pwd_file)
+            if os.path.exists(default_pwd_file):
+                with open(default_pwd_file, 'r') as fd:
+                    pwd = fd.readline().strip()
+                    return pwd
+            
+        # Ask on console:
+        pwd = getpass.getpass("Password for Canvas database: ")
+        return pwd
     
     #------------------------------------
     # check_table_existence 
@@ -410,7 +416,7 @@ class CanvasUtilsTests(unittest.TestCase):
     
     def check_table_existence(self, db, _db_schema, num_expected_tables=0):
         # Get remaining tables:
-        table_names = self.get_tbl_names_in_schema(db, _db_schema)
+        table_names = self.getTblNamesInSchema(db, _db_schema)
         
         self.assertEqual(len(table_names), num_expected_tables)
         
@@ -492,15 +498,15 @@ class CanvasUtilsTests(unittest.TestCase):
         @param db: db object
         @type db: pymysql_utils
         '''
-        tbl_names = self.get_tbl_names_in_schema(db, self.db_schema)
+        tbl_names = self.getTblNamesInSchema(db, self.db_schema)
         for tbl_name in tbl_names:
             db.dropTable(tbl_name)
             
     #------------------------------------
-    # get_tbl_names_in_schema 
+    # getTblNamesInSchema 
     #-------------------    
     
-    def get_tbl_names_in_schema(self, db, db_schema_name):
+    def getTblNamesInSchema(self, db, db_schema_name):
         '''
         Given a db schema ('database name' in MySQL parlance),
         return a list of all tables in that db.

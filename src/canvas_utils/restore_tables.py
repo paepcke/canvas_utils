@@ -202,7 +202,7 @@ if __name__ == '__main__':
                         
     parser.add_argument('-t', '--table',
                         nargs='+',
-                        help='Name of specific table to restore; option can be repeated.',
+                        help='Name of one or more specific table(s) to restore.',
                         default=[]
                         )
 
@@ -217,4 +217,13 @@ if __name__ == '__main__':
                         
 
     args = parser.parse_args();
-        
+    
+    TableRestorer(user=args.user,
+                  pwd=args.password, 
+                  target_db=args.database, 
+                  host=args.host,
+                  tables=args.tables,
+                  force=args.force,
+                  logging_level=logging.INFO,
+                  unittests=False)
+    

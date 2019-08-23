@@ -456,7 +456,8 @@ class CanvasPrep(object):
         lst_tbl_cmd = f'''
                        SELECT table_name
                          FROM information_schema.tables
-                        WHERE table_name REGEXP '{table_root}_{CanvasPrep.datetime_regx}';
+                        WHERE table_name REGEXP '{table_root}_{CanvasPrep.datetime_regx}'
+                          AND table_schema = '{self.db.dbName()}';
                        '''
         tbl_names_res = self.db.query(lst_tbl_cmd)
         backup_table_names = [table_name for table_name in tbl_names_res]
@@ -1001,10 +1002,10 @@ class CanvasPrep(object):
         return backup_table_names_sorted
 
     #------------------------------------
-    # get_tbl_names_in_schema 
+    # getTblNamesInSchema 
     #-------------------    
     
-    def get_tbl_names_in_schema(self, db, db_schema_name):
+    def getTblNamesInSchema(self, db, db_schema_name):
         '''
         Given a db schema ('database name' in MySQL parlance),
         return a list of all tables in that db.
@@ -1013,6 +1014,8 @@ class CanvasPrep(object):
         @type db: MySQLDB
         @param db_schema_name: name of MySQL db in which to find tables
         @type db_schema_name: str
+        @return: list of table names in the given db and schema
+        @rtype: [str]
         '''
         tables_res = db.query(f'''
                               SELECT TABLE_NAME 
@@ -1107,6 +1110,7 @@ class CanvasPrep(object):
                              SELECT table_name 
                                FROM information_schema.tables
                               WHERE table_name = '{table_name}'
+                                AND table_schema = '{self.db.dbName()}';
                              '''
                              )
         return res is not None
@@ -1210,7 +1214,7 @@ if __name__ == '__main__':
                         
     parser.add_argument('-t', '--table',
                         nargs='+',
-                        help='Name of specific table to create whether or not they already exist; option can be repeated.',
+                        help='Name of one or more specific table(s) to create whether or not they already exist.',
                         default=[]
                         )
 

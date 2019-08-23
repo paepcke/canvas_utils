@@ -12,10 +12,12 @@ import getpass
 import logging
 from os import getenv
 import os
+import socket
 from subprocess import PIPE
 import subprocess
 import sys
 
+import shutil
 from pymysql_utils.pymysql_utils import MySQLDB
 
 from canvas_prep import CanvasPrep
@@ -101,7 +103,7 @@ class AuxTableCopier(object):
             self.user = AuxTableCopier.default_user
         else:
             self.user = user
-
+        
         # If pwd is None, as it ought to be,
         # then any use of pwd will use the get_db_pwd()
         # method below:
@@ -124,6 +126,11 @@ class AuxTableCopier(object):
             self.host = host
             
         self.src_db = AuxTableCopier.canvas_db_aux
+
+        # Find the mysql executable. Normally not a problem,
+        # but if running in Eclipse for debugging, the executable
+        # isn't findable:
+        self.mysql_path = self.get_mysql_path()
         
         # The db obj:
         self.db = None
@@ -133,13 +140,15 @@ class AuxTableCopier(object):
         # for this quantity: 
         self.__schema = None
 
+        self.pwd = self.get_db_pwd()
         if unittests:
+            
+            
             
             # In case the connect_to_src_db() call
             # below fails, ensure that self.db isn't
             # None in the 'finally' clause:
             
-            self.pwd = self.get_db_pwd()
             self.db = None
             self.connect_to_src_db(self.user, 
                                        self.host, 
@@ -300,11 +309,6 @@ class AuxTableCopier(object):
         '''
         
         try:
-            if self.db is None or not self.db.isOpen():
-                self.connect_to_src_db(self.user, 
-                                       self.host, 
-                                       self.pwd, 
-                                       self.src_db)
     
             # Have to get schema for each table to make
             # the CSV header.
@@ -312,6 +316,7 @@ class AuxTableCopier(object):
             table_schemas = [self.populate_table_schema(table_name) for table_name in table_names]
             for table_schema in table_schemas:
                 table_name = table_schema.table_name
+                
                 self.log_info(f"Copying {table_name} to {self.dest_dir}/{table_name}.csv...")
                 self.copy_one_table_to_csv(table_schema)
                 self.log_info(f"Done copying {table_schema.table_name}.")
@@ -370,26 +375,39 @@ class AuxTableCopier(object):
             # Use the schema that is currently populated:
             table_schema = self.schema
                   
-        table_name   = table_schema.table_name
-        file_name    = os.path.join(self.dest_dir, table_name) + '.csv'
+        table_name    = table_schema.table_name
+        out_file_name = os.path.join(self.dest_dir, table_name) + '.csv'
+        tmp_file_name = os.path.join('/tmp', table_name) + '.tsv'
         
         # Array of col names for the header line.
         # The csv writer will add quotes around the col names:
         col_name_arr = table_schema.col_names(quoted=False)
-        
-        rows_retrieve_stmt = f'''select *
-                                   from {table_name};
-                                '''
+        field_list   = [f'{col_name}' for col_name in col_name_arr]
+        mysql_cmd = f'''SELECT {', '.join(field_list)}
+                          FROM {table_name};
+                     '''
+        shell_script = os.path.join(os.path.dirname(__file__), 'call_mysql.sh')
+        retrieve_stmt_arr =[shell_script,
+                            self.host,
+                            self.user, 
+                            self.pwd, 
+                            self.src_db,
+                            self.mysql_path,
+                            tmp_file_name,
+                            mysql_cmd
+                            ] 
+        _completed_process = subprocess.run(retrieve_stmt_arr, 
+                                            #capture_output=True, # Only for debugging 
+                                            shell=False)
 
-                                 
-        row_iterator = self.db.query(rows_retrieve_stmt)
-        
-        with open(file_name, 'w') as fd:
-            csv_writer = csv.writer(fd, delimiter=',', quoting=csv.QUOTE_ALL)
-            # Write header line:
-            csv_writer.writerow(col_name_arr)
-            for row in row_iterator:
-                csv_writer.writerow(row)
+        with open(out_file_name, 'w') as out_fd:
+            with open(tmp_file_name, 'r', encoding='ISO-8859-1') as in_fd:
+                tsv_reader = csv.reader(in_fd, delimiter='\t', quoting=csv.QUOTE_ALL)
+                csv_writer = csv.writer(out_fd, delimiter=',', quoting=csv.QUOTE_ALL)
+                for line in tsv_reader:
+                    # Write to dest as csv:
+                    csv_writer.writerow(line)        
+
             
     #-------------------------
     # populate_table_schema 
@@ -416,49 +434,68 @@ class AuxTableCopier(object):
                             '''
         schema_obj = Schema(table_name)
         
-        table_metadata = self.db.query(table_metadata_cmd)
-        for (col_name, col_type, col_max_len, col_default, position, is_auto_increment) in table_metadata:
-            # Add info about one column to this schema:
-            schema_obj.push(col_name, 
-                            col_type,
-                            col_max_len, 
-                            col_default, 
-                            position, 
-                            col_is_auto_increment=(True if is_auto_increment.lower()=='auto_increment' else False))
-    
-        # For each column (i.e. SchemaColumn instance): if the col has 
-        # an index, create SchemaIndex that defines the schema, and add 
-        # it as the 'index' property to the SchemaColumn.
-        # The 'sub_part' column is an the length of the index.
-        # The data types 'text' and 'blob' require specifying a
-        # length if an index is built on them.
+        if self.db is None or not self.db.isOpen():
+            self.connect_to_src_db(self.user, 
+                                   self.host, 
+                                   self.pwd, 
+                                   self.src_db)
         
-        index_metadata_cmd = f'''SELECT index_name, column_name, seq_in_index, sub_part
-                                   FROM information_schema.statistics
-                                  WHERE TABLE_SCHEMA = '{AuxTableCopier.canvas_db_aux}'
-                                    AND TABLE_NAME   = '{table_name}';  
-                              '''
-        idx_info = self.db.query(index_metadata_cmd)
+        try:
+            table_metadata = self.db.query(table_metadata_cmd)
+            for (col_name, col_type, col_max_len, col_default, position, is_auto_increment) in table_metadata:
+                # Add info about one column to this schema:
+                schema_obj.push(col_name, 
+                                col_type,
+                                col_max_len, 
+                                col_default, 
+                                position, 
+                                col_is_auto_increment=(True if is_auto_increment.lower()=='auto_increment' else False))
         
-        for (index_name, col_name, seq_in_index, index_length) in idx_info:
+            # For each column (i.e. SchemaColumn instance): if the col has 
+            # an index, create SchemaIndex that defines the schema, and add 
+            # it as the 'index' property to the SchemaColumn.
+            # The 'sub_part' column is an the length of the index.
+            # The data types 'text' and 'blob' require specifying a
+            # length if an index is built on them.
             
-            schema_col_obj = schema_obj[col_name]
-            schema_idx_obj = SchemaIndex(index_name, col_name, seq_in_index, index_length)
-            schema_col_obj.index = schema_idx_obj
+            index_metadata_cmd = f'''SELECT index_name, column_name, seq_in_index, sub_part
+                                       FROM information_schema.statistics
+                                      WHERE TABLE_SCHEMA = '{AuxTableCopier.canvas_db_aux}'
+                                        AND TABLE_NAME   = '{table_name}';  
+                                  '''
+            idx_info = self.db.query(index_metadata_cmd)
             
-        self.__schema = schema_obj
+            for (index_name, col_name, seq_in_index, index_length) in idx_info:
+                
+                schema_col_obj = schema_obj[col_name]
+                schema_idx_obj = SchemaIndex(index_name, col_name, seq_in_index, index_length)
+                schema_col_obj.index = schema_idx_obj
+                
+            self.__schema = schema_obj
+        finally:
+            self.close_db()
+            
         return schema_obj
     
     #------------------------------------
     # connect_to_src_db 
     #-------------------
     
-    def connect_to_src_db(self, user, host, pwd, src_db):
+    def connect_to_src_db(self, user=None, host=None, pwd=None, src_db=None):
     
+        if user is None:
+            user = self.user
+
+        if host is None:
+            host = self.host
+
         if pwd is None:
             pwd = self.get_db_pwd()    
         self.log_info(f'Connecting to db {user}@{host}:{src_db}...')
                        
+        if src_db is None:
+            src_db = self.src_db
+            
         try:
             # Try logging in, specifying the database in which all the tables
             # to be copied reside: 
@@ -469,6 +506,15 @@ class AuxTableCopier(object):
         self.log_info('Done connecting to db.')
         
         return self.db
+    
+    #-------------------------
+    # close_db 
+    #--------------
+    
+    def close_db(self):
+        if self.db is not None and self.db.isOpen():
+            self.db.close()
+            self.db = None
          
     #-------------------------
     # close 
@@ -480,7 +526,7 @@ class AuxTableCopier(object):
         '''
         self.log_info(f'Copier close(): Closing db at {self.host}...')
         try:
-            self.db.close()
+            self.close_db()
         except AttributeError:
             # Called before self.db was initialized
             pass
@@ -581,6 +627,52 @@ class AuxTableCopier(object):
         return os.path.join(self.dest_dir, tbl_nm) + '.sql' \
             if self.copy_format == 'sql' \
             else os.path.join(self.dest_dir, tbl_nm) + '.csv'
+
+    #-------------------------
+    # get_mysql_path 
+    #--------------
+
+    def get_mysql_path(self):
+        '''
+        Only relevant if running in Eclipse for debugging. 
+        In Eclipse the shell PATH is not available. So 
+        subprocess() won't find mysql, even with shell==True.
+        
+        So: if we are not in Eclipse, we find the mysql path
+        with a simple 'which'. Else we guess.
+        
+        @return: Location of mysql program executable
+        @rtype: str
+        @raise RuntimeError: if executable is not found.
+        '''
+
+        # Eclipse puts extra info into the env:
+        eclipse_indicator = os.getenv('XPC_SERVICE_NAME')
+        
+        # If the indicator is absent, or it doesn't include
+        # the eclipse info, then we are not in Eclipse; the usual
+        # case, of course:
+        
+        if eclipse_indicator is None or \
+           eclipse_indicator == '0' or \
+           eclipse_indicator.find('eclipse') == -1:
+            # Not running in Eclipse; use reliable method to find mysql:
+            mysql_loc = shutil.which('mysql')
+            if mysql_loc is None:
+                raise RuntimeError("MySQL client not found on this machine (%s)" % socket.gethostname())
+        else:
+            # We are in Eclipse:
+            possible_paths = ['/usr/local/bin/mysql',
+                              '/usr/local/mysql/bin/mysql',
+                              '/usr/bin/mysql',
+                              '/bin/mysql']
+            for path in possible_paths:
+                if os.path.exists(path):
+                    mysql_loc = path
+                    break
+            if mysql_loc is None:
+                raise RuntimeError("MySQL client not found on this machine (%s)" % socket.gethostname())
+        return mysql_loc
     
     #-------------------------
     # setup_logging 
