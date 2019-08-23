@@ -536,9 +536,12 @@ class CanvasPrep(object):
             self.log_info('Working on table %s...' % tbl_nm)
             (errors, _warns) = self.db.execute(query, doCommit=False)
             if errors is not None:
-                raise RuntimeError("Could not create table %s: %s" %\
-                                   (tbl_nm, str(errors))
-                                   )
+
+                # Include in error msg the tables that are not
+                # yet done, so user can recover more easily:
+                tbls_to_do = [tbl_name for tbl_name in CanvasPrep.tables if tbl_name not in completed_tables]
+                raise RuntimeError(f"Could not create table tbl_nm: str(errors). \n Still to do in order: {tbls_to_do}")
+
             completed_tables.append(tbl_nm)
             # Make entry in table_refresh_log table:
             self.log_table_creation(tbl_nm, datetime.datetime.now().isoformat())
