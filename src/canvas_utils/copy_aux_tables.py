@@ -21,6 +21,7 @@ import shutil
 from pymysql_utils.pymysql_utils import MySQLDB
 
 from canvas_prep import CanvasPrep
+from query_sorter import TableError
 
 
 class AuxTableCopier(object):
@@ -369,6 +370,7 @@ class AuxTableCopier(object):
         again with a different table name, and then call
         this method again.
 
+        @raise TableError: if cannot retrieve table schema.
         '''
         
         if table_schema is None:
@@ -383,6 +385,10 @@ class AuxTableCopier(object):
         # The csv writer will add quotes around the col names:
         col_name_arr = table_schema.col_names(quoted=False)
         field_list   = [f'{col_name}' for col_name in col_name_arr]
+        if len(field_list) == 0:
+            raise TableError((table_name,None),
+                             f"Table {table_schema.table_name} has no metadata " +
+                             f"(likely does not exist in db {AuxTableCopier.canvas_db_aux}).")
         mysql_cmd = f'''SELECT {', '.join(field_list)}
                           FROM {table_name};
                      '''
