@@ -567,7 +567,7 @@ class CanvasPrep(object):
         # Does the table exist?
         self.db.query(f'''SELECT table_name, table_schema
                             FROM information_schema.tables
-                           WHERE table_schema = {CanvasPrep.canvas_db_aux};
+                           WHERE table_schema = '{CanvasPrep.canvas_db_aux}';
         ''')
         if self.db.result_count() == 0:
             # Log table doesn't exist yet.
