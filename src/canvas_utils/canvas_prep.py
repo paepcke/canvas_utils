@@ -576,9 +576,9 @@ class CanvasPrep(object):
 
         # For convenience:
         load_log_tbl_nm = CanvasPrep.log_table_name
+        curr_db_schema = self.db.dbName()
         
         # Does the table exist?
-        curr_db_schema = self.db.dbName()
         
         res = self.db.query(f'''SELECT count(*)
                              	  FROM information_schema.tables
@@ -606,7 +606,7 @@ class CanvasPrep(object):
         num_rows = res.next()
              
         # Make the entry:
-        (err, _warn) = self.db.insert(load_log_tbl_nm, {'tbl_name' : tbl_nm,
+        (err, _warn) = self.db.insert(load_log_tbl_nm, {f'{curr_db_schema}.tbl_name' : tbl_nm,
                                                         'num_rows' : num_rows})
         if err is not None:
             raise DatabaseError(f"Cannot insert {tbl_nm}'s entry into load log {load_log_tbl_nm}: {repr(err)}")
