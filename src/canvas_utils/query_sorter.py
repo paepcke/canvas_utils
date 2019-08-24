@@ -359,6 +359,24 @@ class TableError(Exception):
     def message(self):
         return f"{self.table_tuple}: {self._message_fragment}"
 
+#-------------------------
+# DatabaseError  
+#--------------
+
+class DatabaseError(Exception):
+    '''
+    Error during interaction with database.
+    One property: message
+    '''
+    def __init__(self, message):
+        self._message_fragment = message
+        super().__init__(self.message)
+        
+    
+    @property
+    def message(self):
+        return f"{self._message_fragment}"
+    
     
 #-------------------------
 # InternalTableError 
