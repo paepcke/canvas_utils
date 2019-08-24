@@ -20,7 +20,8 @@ import sys
 from pymysql_utils.pymysql_utils import MySQLDB
 
 from pull_explore_courses import ECPuller
-from query_sorter import QuerySorter
+from query_sorter import QuerySorter, DatabaseError
+
 
 class CanvasPrep(object):
     '''
@@ -68,6 +69,8 @@ class CanvasPrep(object):
     # for backups:
     datetime_format              = '%Y_%m_%d_%H_%M_%S_%f'
     datetime_format_no_subsecond = '%Y_%m_%d_%H_%M_%S'
+
+    log_table_name = 'LoadLog'
     
     # Recognize: '2019_11_02_11_02_03'
     #        or: '2019_11_02_11_02_03_1234':
@@ -213,9 +216,6 @@ class CanvasPrep(object):
         
         self.log_info('Done connecting to db.')
         
-        if unittests:
-            return
-        
         # Used to have tables whose .sql was not self-contained;
         # it needed non-sql activity before or after. We took
         # care of these, but keep this mechanism for special
@@ -223,6 +223,9 @@ class CanvasPrep(object):
         # future use:
         self.special_tables = {}
         
+        if unittests:
+            return
+
         # Set parameters such as acceptable datetime formats:
         self.prep_db()
         
@@ -406,7 +409,10 @@ class CanvasPrep(object):
                     raise ValueError(f"Table {table_name} does not exist, so cannot be restored to the working copy.")
                 
                 self.db.dropTable(root_name)
-                self.db.execute(f"RENAME TABLE {table_name} TO {root_name};")
+                (err, _warn) = self.db.execute(f"RENAME TABLE {table_name} TO {root_name};")
+                if err is not None:
+                    raise DatabaseError(f"Cannot restore table {table_name} to table {root_name}: {repr(err)}")
+                
                 continue
             elif table_name in CanvasPrep.tables:
                 # Table is a root name; find the most recent backup:
@@ -491,10 +497,10 @@ class CanvasPrep(object):
         Runs through the tbl_creation_paths list of table
         creation .sql files, and executes each. 
         
-        The completed_tables parameter is list of tables
+        The completed_tables parameter is a list of tables
         that are currently already in the target db. None of
         those tables will be replaced. If all tables are to
-        be created, set the parameter to an empty table.
+        be created, set the parameter to an empty list.
         
         @param completed_tables: dictionary of completed tables
         @type completed_tables: {str : bool}
@@ -502,8 +508,15 @@ class CanvasPrep(object):
         @rtype: {str : bool}
         '''
         
+        # Go through the Queries subdir, getting the query
+        # creation file names. Chop off the .sql extensions
+        # to get the table names: 
         for tbl_file_path in CanvasPrep.tbl_creation_paths:
             tbl_nm = self.tbl_nm_from_file(tbl_file_path)
+            
+            if tbl_nm in completed_tables:
+                # Table already exists. Skip it:
+                continue
             
             # Special handlers would be for table creations that
             # cannot be expressed in sql alone. Currently there
@@ -536,15 +549,14 @@ class CanvasPrep(object):
             self.log_info('Working on table %s...' % tbl_nm)
             (errors, _warns) = self.db.execute(query, doCommit=False)
             if errors is not None:
-
                 # Include in error msg the tables that are not
                 # yet done, so user can recover more easily:
                 tbls_to_do = [tbl_name for tbl_name in CanvasPrep.tables if tbl_name not in completed_tables]
-                raise RuntimeError(f"Could not create table tbl_nm: str(errors). \n Still to do in order: {tbls_to_do}")
+                raise DatabaseError(f"Could not create table tbl_nm: str(errors). \n Still to do in order: {tbls_to_do}")
 
             completed_tables.append(tbl_nm)
             # Make entry in table_refresh_log table:
-            self.log_table_creation(tbl_nm, datetime.datetime.now().isoformat())
+            self.log_table_creation(tbl_nm)
             self.log_info('Done working on table %s' % tbl_nm)
         return completed_tables
         
@@ -552,31 +564,52 @@ class CanvasPrep(object):
     # log_table_creation 
     #--------------
     
-    def log_table_creation(self, tbl_nm, timestamp):
+    def log_table_creation(self, tbl_nm):
         '''
         Make an entry in table table_refresh_log, indicating
         that the given table name was refreshed at the given
-        date and time.
+        date and time. Also adds the new table's number of rows.
         
         @param tbl_nm: name of table that was refreshed
         @type tbl_nm: str
-        @param timestamp: date/time of completion
-        @type timestamp: str
         '''
+
+        # For convenience:
+        load_log_tbl_nm = CanvasPrep.log_table_name
         
         # Does the table exist?
-        self.db.query(f'''SELECT table_name, table_schema
-                            FROM information_schema.tables
-                           WHERE table_schema = '{CanvasPrep.canvas_db_aux}';
+        curr_db_schema = self.db.dbName()
+        
+        res = self.db.query(f'''SELECT count(*)
+                             	  FROM information_schema.tables
+                            	 WHERE table_schema = '{curr_db_schema}'
+                            	   AND table_name = '{load_log_tbl_nm}';
         ''')
-        if self.db.result_count() == 0:
+        if res.next() == 0:
             # Log table doesn't exist yet.
             # Create it:
-            self.db.execute("CREATE TABLE table_refresh_log(tbl_name varchar(255), timestamp varchar(50)")
-            
+            (err, _warn) = self.db.execute(f'''CREATE TABLE {load_log_tbl_nm} (
+                                         		tbl_name varchar(255),
+                                        		time_refreshed DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                                        		num_rows int
+                                          )
+                                         ''')
+            if err is not None:
+                raise DatabaseError(f"Cannot create load log table {load_log_tbl_nm}: {repr(err)}")
+
+        # Find number of rows in table:
+        res = self.db.query(f'''SELECT table_rows
+                             	  FROM information_schema.tables
+                            	 WHERE table_schema = '{curr_db_schema}'
+                            	   AND table_name = '{tbl_nm}';
+        ''')
+        num_rows = res.next()
+             
         # Make the entry:
-        self.db.insert('table_refresh_log', {'tbl_name' : tbl_nm,
-                                             'timestamp' : timestamp})
+        (err, _warn) = self.db.insert(load_log_tbl_nm, {'tbl_name' : tbl_nm,
+                                                        'num_rows' : num_rows})
+        if err is not None:
+            raise DatabaseError(f"Cannot insert {tbl_nm}'s entry into load log {load_log_tbl_nm}: {repr(err)}")
         
     #-------------------------
     # pull_explore_courses 
@@ -715,9 +748,9 @@ class CanvasPrep(object):
                 # Create the db:
                 db.execute('CREATE DATABASE %s;' % CanvasPrep.canvas_db_aux)
             else:
-                raise RuntimeError("Cannot open Canvas database: %s" % repr(e))
+                raise DatabaseError("Cannot open Canvas database: %s" % repr(e))
         except Exception as e:
-            raise RuntimeError("Cannot open Canvas database: %s" % repr(e))
+            raise DatabaseError("Cannot open Canvas database: %s" % repr(e))
         
         return db
     
@@ -729,18 +762,26 @@ class CanvasPrep(object):
         
         # All SQL is written assuming MySQL's current db is
         # the one where the new tables will be created:
-        self.db.execute('USE %s' % CanvasPrep.canvas_db_aux)
+        (err, _warn) = self.db.execute('USE %s' % CanvasPrep.canvas_db_aux)
+        if err is not None:
+            raise DatabaseError(f"Cannot switch to db {CanvasPrep.canvas_db_aux}: {repr(err)}")
+
         
         # MySQL 8 started to complain when functions do not 
         # specify DETERMINISTIC or NO_SQL, or one of several other
         # function characteristics. Avoid that complaint:
         
-        self.db.execute("SET GLOBAL log_bin_trust_function_creators = 1;")
+        (err, _warn) = self.db.execute("SET GLOBAL log_bin_trust_function_creators = 1;")
+        if err is not None:
+            self.log_warn(f"Cannot set global log_bin_trus_function_creators: {repr(err)}")
+        
         
         # At least for MySQL 8.x we need to allow zero dates,
         # like '0000-00-00 00:00:00', which is found in the Canvas db:
         
-        self.db.execute('SET sql_mode="ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION";')
+        (err, _warn) = self.db.execute('SET sql_mode="ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION";')
+        if err is not None:
+            self.log_warn(f"Cannot set sql_mode: {repr(err)}")
         
         
         # Ensure that all the handy SQL functions are available.

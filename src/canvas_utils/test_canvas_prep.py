@@ -117,11 +117,12 @@ class CanvasUtilsTests(unittest.TestCase):
         self.db_schema = CanvasUtilsTests.unittests_db_nm
         self.user      = CanvasUtilsTests.user
         self.test_host = CanvasUtilsTests.test_host
-        self.prep_obj = CanvasPrep(user=self.user, 
+        self.prep_obj  = CanvasPrep(user=self.user, 
                               host=self.test_host, 
                               target_db=self.db_schema,
                               pwd=CanvasUtilsTests.get_db_pwd(),
                               unittests=True)
+        self.db        = self.prep_obj.db
 
     #-------------------------
     # tearDown 
@@ -374,6 +375,73 @@ class CanvasUtilsTests(unittest.TestCase):
         self.assertEqual(len(table_names_now), 2)
         res = db.query(f"SELECT COL1 FROM {test_table_name} LIMIT 1;")
         self.assertEqual(res.next(), 10)
+        
+    #-------------------------
+    # testLoadLogging 
+    #--------------
+        
+    @unittest.skipIf(not TEST_ALL, 'Temporarily skip this test.')
+    def testLoadLogging(self):
+        '''
+        The table LoadLog, which should be created automatically,
+        if it is not present, and should recorde table name, loade time,
+        and number of rows.
+        '''
+        test_table_name = 'Terms'
+        db = self.prep_obj.db
+        self.removeAllUnittestTables(db)
+        
+        # For convenience:
+        load_log_tbl_nm = CanvasPrep.log_table_name
+        db.createTable(test_table_name, {'col1': 'int'}, temporary=False)
+        
+        # Add three rows
+        db.insert(test_table_name, {'col1': 10})
+        db.insert(test_table_name, {'col1': 20})
+        db.insert(test_table_name, {'col1': 30})
+                
+        tbl_names = self.getTblNamesInSchema(db, self.db_schema)
+        
+        self.assertEqual(tbl_names, [test_table_name])
+
+        # Get date before log entry (datetime below yields, e.g. '2019-08-23T20:31:26.926837')
+        (date_str_before, _time_str) = datetime.datetime.utcnow().isoformat().split('T')
+        
+        # Log the table:
+        self.prep_obj.log_table_creation(test_table_name)
+        
+        # Get current date ('2019-08-23T20:31:26.926837')
+        (date_str_after, _time_str) = datetime.datetime.utcnow().isoformat().split('T')
+        
+        
+        # Check that the load table now exists:
+        tbl_names = self.getTblNamesInSchema(db, self.db_schema)
+        self.assertCountEqual(tbl_names, [test_table_name, load_log_tbl_nm])
+        
+        # Check the content, ensuring the refresh timestamps
+        # comes back in UTC:
+        query = f'''SELECT tbl_name, 
+                           CONVERT_TZ(time_refreshed, @@session.time_zone, '+00:00') AS `utc_time_refreshed`,
+                           num_rows
+                      FROM {load_log_tbl_nm}'''
+                      
+        res = self.db.query(query)
+        
+        # Should be one row:
+        self.assertEqual(db.result_count(), 1)
+        (tbl_nm, utc_time_loaded, num_rows) = res.next()
+        
+        self.assertEqual(tbl_nm, test_table_name)
+        
+        # Date must be either the date just before the 
+        # log entry, or the one just after (in case the
+        # test happens just at midnight):
+        # The load log entry timestamps have form: 2019-08-23 20:25:25
+        (load_date, _load_time) = utc_time_loaded.isoformat().split('T')
+        self.assertTrue(load_date == date_str_before or load_date == date_str_after)
+        
+        self.assertEqual(num_rows, 3)
+                
     
     # ------------------------------- Utilities -------------------------
 

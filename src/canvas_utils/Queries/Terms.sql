@@ -3,7 +3,7 @@ CREATE TABLE Terms (
     term_id bigint,
     term_name varchar(60),
     start_date timestamp
-    );
+    ) engine=MyISAM;
 
 # <end_creation>
 
