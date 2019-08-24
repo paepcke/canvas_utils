@@ -606,8 +606,9 @@ class CanvasPrep(object):
         num_rows = res.next()
              
         # Make the entry:
-        (err, _warn) = self.db.insert(load_log_tbl_nm, {f'{curr_db_schema}.tbl_name' : tbl_nm,
-                                                        'num_rows' : num_rows})
+        (err, _warn) = self.db.execute(f'''INSERT INTO {curr_db_schema}.{load_log_tbl_nm} (tbl_name, num_rows)
+                                                VALUES('{tbl_nm}', {num_rows})
+                                                ''')
         if err is not None:
             raise DatabaseError(f"Cannot insert {tbl_nm}'s entry into load log {load_log_tbl_nm}: {repr(err)}")
         
@@ -788,7 +789,7 @@ class CanvasPrep(object):
         funcs_file = os.path.join(self.queries_dir, 'mysqlProcAndFuncBodies.sql')
         (errors, _warns) = self.db.execute('SOURCE %s' % funcs_file)
         if errors is not None:
-            raise RuntimeError("Could not load MySQL funcs/procedures: %s" % str(errors))
+            self.log_warn("Could not load MySQL funcs/procedures: %s" % str(errors))
         
 
     #-------------------------
