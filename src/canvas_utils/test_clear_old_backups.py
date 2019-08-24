@@ -3,11 +3,10 @@ Created on Aug 20, 2019
 
 @author: paepcke
 '''
-import configparser
-import os
 import unittest
 
 from clear_old_backups import BackupRemover
+from config_info import ConfigInfo
 
 
 TEST_ALL = True
@@ -28,10 +27,9 @@ class ClearBackupTablesTester(unittest.TestCase):
         # Get whether to test on localhost, or on 
         # remote host:
         
-        config = configparser.ConfigParser()
-        config.read(os.path.join(os.path.dirname(__file__), '../../setup.cfg'))
-        cls.test_host = config['TESTMACHINE']['mysql_host']
-        cls.user = config['TESTMACHINE']['mysql_user']
+        config_info = ConfigInfo()
+        cls.test_host = config_info.test_default_host
+        cls.user = config_info.test_default_user
         
         cls.tbl_remover = BackupRemover(num_to_keep=cls.num_to_keep,
                                         target_db=('unittest' if cls.test_host=='localhost' else None),

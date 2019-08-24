@@ -12,16 +12,17 @@ import getpass
 import logging
 from os import getenv
 import os
+import shutil
 import socket
 from subprocess import PIPE
 import subprocess
 import sys
 
-import shutil
 from pymysql_utils.pymysql_utils import MySQLDB
 
 from canvas_prep import CanvasPrep
 from query_sorter import TableError
+from utilities import Utilities
 
 
 class AuxTableCopier(object):
@@ -88,6 +89,10 @@ class AuxTableCopier(object):
             database where unittests will be performed.
         
         '''
+        
+        # Access to common functionality:
+        self.utils = Utilities()
+        
         if unittests:
             # Running unittests on localhost. We stipulate
             # that a db 'Unittest' exists to which user
@@ -97,8 +102,7 @@ class AuxTableCopier(object):
             else:
                 AuxTableCopier.canvas_db_aux = unittest_db_name
         
-        self.setup_logging()
-        self.logger.setLevel(logging_level)
+        self.utils.setup_logging(logging_level)
         
         if user is None:
             self.user = AuxTableCopier.default_user
@@ -238,9 +242,10 @@ class AuxTableCopier(object):
                 self.log_err(f"Error copying table {table_name}: {err_msg}") 
             
         if overwrite_existing:
-            self.log_info(f"Copied all {len(copy_result.completed_tables)} tables. Done.")
+            self.log_info(f"Copied all {len(copy_result.completed_tables)} tables to $HOME/CanvasTableCopies. Done.")
         else:
-            self.log_info(f"Copied {len(copy_result.completed_tables)} of all {len(self.tables)} tables. Done")
+            self.log_info(f"Copied {len(copy_result.completed_tables)} of all " +
+                          f"{len(self.tables)} tables to $HOME/CanvasTableCopies. Done")
             
         return copy_result
 
@@ -680,55 +685,6 @@ class AuxTableCopier(object):
                 raise RuntimeError("MySQL client not found on this machine (%s)" % socket.gethostname())
         return mysql_loc
     
-    #-------------------------
-    # setup_logging 
-    #--------------
-    
-    def setup_logging(self, loggingLevel=logging.INFO, logFile=None):
-        '''
-        Set up the standard Python logger.
-
-        @param loggingLevel: initial logging level
-        @type loggingLevel: {logging.INFO|WARN|ERROR|DEBUG}
-        @param logFile: optional file path where to send log entries
-        @type logFile: str
-        '''
-
-        self.logger = logging.getLogger(os.path.basename(__file__))
-
-        # Create file handler if requested:
-        if logFile is not None:
-            handler = logging.FileHandler(logFile)
-            print('Logging of control flow will go to %s' % logFile)
-        else:
-            # Create console handler:
-            handler = logging.StreamHandler()
-        handler.setLevel(loggingLevel)
-
-        # Create formatter
-        formatter = logging.Formatter("%(name)s: %(asctime)s;%(levelname)s: %(message)s")
-        handler.setFormatter(formatter)
-
-        # Add the handler to the logger
-        if len(self.logger.handlers) == 0:
-            self.logger.addHandler(handler)
-        self.logger.setLevel(loggingLevel)
-    
-    #-------------------------
-    # log_debug/warn/info/err 
-    #--------------
-
-    def log_debug(self, msg):
-        self.logger.debug(msg)
-
-    def log_warn(self, msg):
-        self.logger.warning(msg)
-
-    def log_info(self, msg):
-        self.logger.info(msg)
-
-    def log_err(self, msg):
-        self.logger.error(msg)
    
 # -------------------------- Class CopyResult ---------------
 

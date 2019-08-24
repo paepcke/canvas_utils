@@ -6,14 +6,13 @@ TODO:
   o Add test for index on 'text'
 
 '''
-import configparser
 import getpass
 import os
-import shutil
 import unittest
 
 from pymysql_utils.pymysql_utils import MySQLDB
 
+from config_info import ConfigInfo
 from copy_aux_tables import AuxTableCopier
 from copy_aux_tables import Schema
 from unittest_db_finder import UnittestDbFinder
@@ -39,18 +38,10 @@ class AuxTableCopyTester(unittest.TestCase):
         # run the tests on. If setup.py does not exist, copy
         # setupSample.py to setup.py:
         
-        conf_file_dir  = os.path.join(os.path.dirname(__file__), '../../')
-        conf_file_path = os.path.join(conf_file_dir, 'setup.cfg')
-        if not os.path.exists(conf_file_path):
-            shutil.copyfile(os.path.join(conf_file_dir, 'setupSample.cfg'),
-                            os.path.join(conf_file_dir, 'setup.cfg'))        
+        config_info = ConfigInfo()
         
-        config = configparser.ConfigParser()
-        setup_file_name = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../setup.cfg'))
-        config.read(setup_file_name)
-        test_host       = cls.test_host = config['TESTMACHINE']['mysql_host']
-        user            = cls.user = config['TESTMACHINE']['mysql_user']
-        
+        test_host       = config_info.test_default_host
+        user            = config_info.test_default_user
 
         cls.test_host = test_host
         cls.user      = user

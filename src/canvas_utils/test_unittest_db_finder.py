@@ -3,7 +3,6 @@ Created on Aug 21, 2019
 
 @author: paepcke
 '''
-import configparser
 import getpass
 from os import getenv
 import os
@@ -11,6 +10,7 @@ import unittest
 
 from pymysql_utils.pymysql_utils import MySQLDB
 
+from config_info import ConfigInfo
 from unittest_db_finder import UnittestDbFinder
 
 
@@ -34,10 +34,9 @@ class FindUnittestDbTester(unittest.TestCase):
         # Get whether to test on localhost, or on 
         # remote host:
         
-        config = configparser.ConfigParser()
-        config.read(os.path.join(os.path.dirname(__file__), '../../setup.cfg'))
-        cls.test_host = config['TESTMACHINE']['mysql_host']
-        cls.user = config['TESTMACHINE']['mysql_user']
+        config_info   = ConfigInfo()
+        cls.test_host = config_info.test_default_host
+        cls.user      = config_info.test_default_user
         
         cls.db = MySQLDB(user=cls.user, 
                          passwd=cls.get_db_pwd(),  # Assume pwd in in ~/.ssh/canvas_pwd 

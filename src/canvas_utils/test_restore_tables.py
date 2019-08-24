@@ -3,16 +3,15 @@ Created on May 1, 2019
 
 @author: paepcke
 '''
-import configparser
 import datetime
 import getpass
 import os
-import shutil
 import unittest
 
 from pymysql_utils.pymysql_utils import MySQLDB
 
 from canvas_prep import CanvasPrep
+from config_info import ConfigInfo
 from restore_tables import TableRestorer
 from unittest_db_finder import UnittestDbFinder
 
@@ -40,17 +39,10 @@ class CanvasRestoreTablesTests(unittest.TestCase):
         # run the tests on. If setup.py does not exist, copy
         # setupSample.py to setup.py:
         
-        conf_file_dir  = os.path.join(os.path.dirname(__file__), '../../')
-        conf_file_path = os.path.join(conf_file_dir, 'setup.cfg')
-        if not os.path.exists(conf_file_path):
-            shutil.copyfile(os.path.join(conf_file_dir, 'setupSample.cfg'),
-                            os.path.join(conf_file_dir, 'setup.cfg'))        
-        
-        config = configparser.ConfigParser()
-        config.read(conf_file_path)
-        test_host       = cls.test_host = config['TESTMACHINE']['mysql_host']
-        cls.user = config['TESTMACHINE']['mysql_user']
-        cls.canvas_pwd_file = config['DATABASE']['canvas_pwd_file']
+        config_info     	= ConfigInfo()
+        test_host       	= cls.test_host = config_info.test_default_host
+        cls.user        	= config_info.test_default_user
+        cls.canvas_pwd_file = config_info.canvas_pwd_file
 
         # If not working on localhost, where we expect a db
         # 'Unittest" Ensure there is a unittest db for us to work in.

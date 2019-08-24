@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 '''
 Created on Aug 20, 2019
 
@@ -5,11 +6,13 @@ Created on Aug 20, 2019
 '''
 
 import argparse
+import logging
 import os
 import sys
-import logging
 
 from canvas_prep import CanvasPrep
+from utilities import Utilities
+
 
 class BackupRemover(object):
     '''
@@ -17,12 +20,13 @@ class BackupRemover(object):
     table backups from the aux directory.
     '''
 
+    default_num_backups_to_keep = 2
     #------------------------------------
     # Constructor 
     #-------------------    
 
     def __init__(self,
-                 num_to_keep=2, 
+                 num_to_keep=None,
                  user=None, 
                  pwd=None, 
                  target_db=None, 
@@ -67,10 +71,16 @@ class BackupRemover(object):
         @type unittests: boolean
         '''
 
+        # Access to common functionality:
+        self.utils = Utilities()
+        
         if target_db is None:
             target_db = CanvasPrep.canvas_db_aux
         
-        self.num_to_keep = num_to_keep
+        if self.num_to_keep is None:
+            self.num_to_keep = BackupRemover.default_num_backups_to_keep,
+        else:
+            self.num_to_keep = num_to_keep
         # Better name for tables to consider removing:
         tables_to_consider = tables
         
@@ -84,7 +94,7 @@ class BackupRemover(object):
                                          logging_level=logging_level,
                                          unittests=unittests)
 
-        self.setup_logging()
+        self.utils.setup_logging(logging_level)
         self.db_obj = self.canvas_prepper.db
         if unittests:
             self.db_name = target_db
@@ -227,15 +237,6 @@ class BackupRemover(object):
     def close(self):
         self.canvas_prepper.close()
 
-    #------------------------------------
-    # setup_logging 
-    #-------------------    
-        
-    def setup_logging(self):
-        self.log_info = self.canvas_prepper.log_info
-        self.log_err = self.canvas_prepper.log_err
-        self.log_warn = self.canvas_prepper.log_warn
-
 # ----------------------------- Main ------------------------
 
 if __name__ == '__main__':
@@ -246,14 +247,16 @@ if __name__ == '__main__':
                                      )
 
     parser.add_argument('-n', '--num_to_keep',
-                        help='Number of backup tables to keep for each table. Default is 2',
-                        default=2)
+                        help=f'Number of backup tables to keep for each table. Default is ' +
+                            f'{BackupRemover.default_num_backups_to_keep}',
+                        default=BackupRemover.default_num_backups_to_keep)
     parser.add_argument('-u', '--user',
                         help='user name for logging into the canvas database. Default: {}'.format(CanvasPrep.default_user),
                         default=CanvasPrep.default_user)
                         
     parser.add_argument('-p', '--password',
-                        help='password for logging into the canvas database. Default: content of $HOME/.ssh/canvas_db',
+                        help='password for logging into the canvas database.\n' +
+                             'Default: content of $HOME/.ssh/canvas_db',
                         action='store_true',
                         default=None)
                         
@@ -264,12 +267,14 @@ if __name__ == '__main__':
                         
     parser.add_argument('-t', '--table',
                         nargs='+',
-                        help='Name of one or more specific table(s) whose backups are to be removed. Default: all',
+                        help='Name of one or more specific table(s) whose backups are to be removed. \n' +
+                             'May be mix of backup table names and root table names. Default: all',
                         default=[]
                         )
 
     parser.add_argument('-d', '--database',
-                        help='MySQL/Aurora database (schema) into which new tables are to be placed. Default: canvasdata_aux',
+                        help='MySQL/Aurora database (schema) into which new tables are \n' +
+                             'to be placed. Default: canvasdata_aux',
                         default='canvasdata_aux')
     
     args = parser.parse_args();

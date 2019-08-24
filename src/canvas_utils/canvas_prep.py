@@ -6,19 +6,21 @@ Created on Jan 1, 2019
 '''
 
 import argparse
-import configparser
 import datetime
 import getpass
-import logging
 from os import getenv
 import os
 import pickle
 import pwd
 import re
 import sys
+import logging
 
 from pymysql_utils.pymysql_utils import MySQLDB
 
+from utilities import Utilities
+from clear_old_backups import BackupRemover
+from config_info import ConfigInfo
 from pull_explore_courses import ECPuller
 from query_sorter import QuerySorter, DatabaseError
 
@@ -119,6 +121,9 @@ class CanvasPrep(object):
             unittests to call methods in isolation.
         @type unittests: boolean
         '''
+
+        # Access to convenience funcations:
+        self.utils = Utilities()
         
         self.unittests = CanvasPrep.unittests = unittests
 
@@ -129,38 +134,17 @@ class CanvasPrep(object):
         # Under certain conditions __file__ is a relative path.
         # Ensure availability of an absolute path:
         self.curr_dir = os.path.dirname(os.path.realpath(__file__))
-        proj_root_dir = os.path.join(self.curr_dir, '../..')
         
         # Read any configs from the config file, if it exists:
-        config_parser = configparser.ConfigParser()
-        config_parser.read(os.path.join(proj_root_dir, 'setup.cfg'))
+        config_info = ConfigInfo()
 
         if not unittests:
-            try:
-                CanvasPrep.default_host = config_parser['DATABASE']['default_host']
-            except KeyError:
-                pass
-    
-            try:
-                CanvasPrep.canvas_db_aux = config_parser['DATABASE']['canvas_auxiliary_db_name']
-            except KeyError:
-                pass
-    
-            try:
-                CanvasPrep.default_user = config_parser['DATABASE']['default_user']
-            except KeyError:
-                pass
+            CanvasPrep.default_host  = config_info.default_host
+            CanvasPrep.canvas_db_aux = config_info.canvas_db_aux
+            CanvasPrep.default_user  = config_info.default_user
         else:
-            try:
-                CanvasPrep.default_host = config_parser['TESTMACHINE']['mysql_host']
-            except KeyError:
-                pass
-    
-            try:
-                CanvasPrep.default_user = config_parser['TESTMACHINE']['mysql_user']
-            except KeyError:
-                pass
-            
+            CanvasPrep.default_host = config_info.test_default_host
+            CanvasPrep.default_user = config_info.test_default_user
         
         self.new_only = new_only
         self.skip_backups = skip_backups
@@ -193,8 +177,7 @@ class CanvasPrep(object):
             # Names are the table names.
             CanvasPrep.create_table_name_array()
 
-        self.setup_logging()
-        self.logger.setLevel(logging_level)
+        self.utils.setup_logging(logging_level)
         
         # Create list of full paths to table
         # creation sql files:
@@ -269,8 +252,13 @@ class CanvasPrep(object):
             
         # Create the other tables that are needed.
         try:
-            completed_tables = self.create_tables(completed_tables=completed_tables)
-            
+            if self.dryrun:
+                print("Would create fresh copies of the other courses.")
+                print(f"Would remove all but {BackupRemover.num_to_keep} backups")
+
+            else:
+                completed_tables = self.create_tables(completed_tables=completed_tables)
+                BackupRemover()
         finally:
             self.close()
         
@@ -1195,63 +1183,6 @@ class CanvasPrep(object):
                              )
         return res is not None
         
-    #-------------------------
-    # setup_logging 
-    #--------------
-    
-    def setup_logging(self, loggingLevel=logging.INFO, logFile=None):
-        '''
-        Set up the standard Python logger.
-
-        @param loggingLevel: initial logging level
-        @type loggingLevel: {logging.INFO|WARN|ERROR|DEBUG}
-        @param logFile: optional file path where to send log entries
-        @type logFile: str
-        '''
-
-        self.logger = logging.getLogger(os.path.basename(__file__))
-
-        # Create file handler if requested:
-        if logFile is not None:
-            self.handler = logging.FileHandler(logFile)
-            print('Logging of control flow will go to %s' % logFile)
-        else:
-            # Create console handler:
-            self.handler = logging.StreamHandler()
-        self.handler.setLevel(loggingLevel)
-
-        # Create formatter
-        formatter = logging.Formatter("%(name)s: %(asctime)s;%(levelname)s: %(message)s")
-        self.handler.setFormatter(formatter)
-
-        # Add the handler to the logger
-        if len(self.logger.handlers) == 0:
-            self.logger.addHandler(self.handler)
-        self.logger.setLevel(loggingLevel)
-        
-    #------------------------------------
-    # shutdown_logging 
-    #-------------------    
-        
-    def shutdown_logging(self):
-        self.logger.removeHandler(self.handler)
-        logging.shutdown()
-
-    #-------------------------
-    # log_debug/warn/info/err 
-    #--------------
-
-    def log_debug(self, msg):
-        self.logger.debug(msg)
-
-    def log_warn(self, msg):
-        self.logger.warning(msg)
-
-    def log_info(self, msg):
-        self.logger.info(msg)
-
-    def log_err(self, msg):
-        self.logger.error(msg)
 
 # ----------------------------- Main ------------------------
 

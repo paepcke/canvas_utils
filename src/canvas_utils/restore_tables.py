@@ -32,6 +32,10 @@ class TableRestorer(object):
         '''
         Constructor
         '''
+        
+        # Access to common functionality:
+        self.utils = Utilities()
+        
         if target_db is None:
             target_db = CanvasPrep.canvas_db_aux
         
@@ -45,7 +49,7 @@ class TableRestorer(object):
                                          logging_level=logging_level,
                                          unittests=unittests)
 
-        self.setup_logging()
+        self.utils.setup_logging()
         self.db_obj = self.canvas_prepper.db
         if unittests:
             self.db_name = target_db
@@ -163,15 +167,6 @@ class TableRestorer(object):
     def close(self):
         self.canvas_prepper.close()
 
-    #------------------------------------
-    # setup_logging 
-    #-------------------    
-        
-    def setup_logging(self):
-        self.log_info = self.canvas_prepper.log_info
-        self.log_err = self.canvas_prepper.log_err
-        self.log_warn = self.canvas_prepper.log_warn
-        
 # ----------------------------- Main ------------------------
 
 if __name__ == '__main__':

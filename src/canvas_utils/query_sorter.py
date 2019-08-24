@@ -334,6 +334,28 @@ class QuerySorter(object):
 
 # --------------------- Exception Classes --------------------
 
+#-------------------------
+# ConfigurationError 
+#--------------
+
+
+class ConfigurationError(Exception):
+    '''
+    Exception raised when the setup.cfg file cannot
+    be read, or holds faulty content.
+
+    Attributes:
+        message -- explanation of the error
+    '''
+
+    def __init__(self, message):
+        self._message_fragment = message
+        super().__init__(self.message)
+        
+    
+    @property
+    def message(self):
+        return f"{self._message_fragment}"
 
 #-------------------------
 # TableError

@@ -7,6 +7,8 @@ Created on Aug 21, 2019
 import logging
 import os
 
+from utilities import Utilities
+
 
 class UnittestDbFinder(object):
     '''
@@ -47,12 +49,15 @@ class UnittestDbFinder(object):
             created database.
         @type unittests: bool
         '''
+        
+        # Access to common functionality:
+        self.utils = Utilities()
+                
         # If not working on localhost, where we expect a db
         # 'Unittest" Ensure there is a unittest db for us to work in.
         # We'll delete it later:
         
-        self.setup_logging()
-        self.logger.setLevel(logging_level)
+        self.utils.setup_logging(logging_level)
         
         if db_obj is None:
             test_host = 'localhost'
@@ -104,61 +109,3 @@ class UnittestDbFinder(object):
     def unittest_db_name(self):
         return self.db_name
     
-
-    #-------------------------
-    # setup_logging 
-    #--------------
-    
-    def setup_logging(self, loggingLevel=logging.INFO, logFile=None):
-        '''
-        Set up the standard Python logger.
-
-        @param loggingLevel: initial logging level
-        @type loggingLevel: {logging.INFO|WARN|ERROR|DEBUG}
-        @param logFile: optional file path where to send log entries
-        @type logFile: str
-        '''
-
-        self.logger = logging.getLogger(os.path.basename(__file__))
-
-        # Create file handler if requested:
-        if logFile is not None:
-            self.handler = logging.FileHandler(logFile)
-            print('Logging of control flow will go to %s' % logFile)
-        else:
-            # Create console handler:
-            self.handler = logging.StreamHandler()
-        self.handler.setLevel(loggingLevel)
-
-        # Create formatter
-        formatter = logging.Formatter("%(name)s: %(asctime)s;%(levelname)s: %(message)s")
-        self.handler.setFormatter(formatter)
-
-        # Add the handler to the logger
-        if len(self.logger.handlers) == 0:
-            self.logger.addHandler(self.handler)
-        self.logger.setLevel(loggingLevel)
-        
-    #------------------------------------
-    # shutdown_logging 
-    #-------------------    
-        
-    def shutdown_logging(self):
-        self.logger.removeHandler(self.handler)
-        logging.shutdown()
-
-    #-------------------------
-    # log_debug/warn/info/err 
-    #--------------
-
-    def log_debug(self, msg):
-        self.logger.debug(msg)
-
-    def log_warn(self, msg):
-        self.logger.warning(msg)
-
-    def log_info(self, msg):
-        self.logger.info(msg)
-
-    def log_err(self, msg):
-        self.logger.error(msg)    
