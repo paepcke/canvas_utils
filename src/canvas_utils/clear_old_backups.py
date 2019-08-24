@@ -278,6 +278,6 @@ if __name__ == '__main__':
                   pwd=args.password, 
                   target_db=args.database, 
                   host=args.host,
-                  tables=args.tables,
+                  tables=args.table,
                   logging_level=logging.INFO,
                   unittests=False)
