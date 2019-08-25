@@ -150,6 +150,8 @@ class CanvasPrep(object):
         if user is None:
             user = CanvasPrep.default_user
 
+        self.user = user
+
         if host is None:
             host = CanvasPrep.default_host
             
@@ -164,6 +166,8 @@ class CanvasPrep(object):
             target_db = self.config_info.canvas_db_aux
         else:
             target_db = target_db
+            
+        self.target_db = target_db
             
         # If user wants only particular tables to be created
         # then the tables arg will be a list of table names:
@@ -261,7 +265,11 @@ class CanvasPrep(object):
 
             else:
                 completed_tables = self.create_tables(completed_tables=completed_tables)
-                BackupRemover()
+                BackupRemover(user=self.user,
+                              pwd=self.pwd,
+                              target_db=self.target_db,
+                              host=self.host
+                              )
         finally:
             self.close()
         
