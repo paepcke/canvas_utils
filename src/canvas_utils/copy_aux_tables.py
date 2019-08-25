@@ -8,7 +8,6 @@ from _collections import OrderedDict
 import argparse
 import collections.abc
 import csv
-import getpass
 import logging
 from os import getenv
 import os
@@ -20,7 +19,6 @@ import sys
 
 from pymysql_utils.pymysql_utils import MySQLDB
 
-from canvas_prep import CanvasPrep
 from query_sorter import TableError
 from utilities import Utilities
 
@@ -147,7 +145,7 @@ class AuxTableCopier(object):
         # for this quantity: 
         self.__schema = None
 
-        self.pwd = self.get_db_pwd()
+        self.pwd = self.utils.get_db_pwd(self.host)
         if unittests:
             
             
@@ -281,7 +279,7 @@ class AuxTableCopier(object):
                                   else cmd_fragment 
                         for cmd_fragment 
                         in bash_cmd]
-            pwd = self.get_db_pwd() 
+            pwd = self.utils.get_db_pwd(self.host) 
             bash_cmd = [pwd if cmd_fragment == '<pwd>' 
                                   else cmd_fragment 
                         for cmd_fragment 
@@ -503,7 +501,7 @@ class AuxTableCopier(object):
             host = self.host
 
         if pwd is None:
-            pwd = self.get_db_pwd()    
+            pwd = self.utils.get_db_pwd(host)    
         self.log_info(f'Connecting to db {user}@{host}:{src_db}...')
                        
         if src_db is None:
@@ -608,30 +606,6 @@ class AuxTableCopier(object):
         existing_tables = table_name_set & table_copies_set
         return existing_tables
 
-    #-------------------------
-    # get_db_pwd
-    #--------------
-
-    def get_db_pwd(self):
-        
-        if self.host == 'localhost':
-            return ''
-        
-        if self.pwd is not None:
-            return self.pwd
-                
-        HOME = os.getenv('HOME')
-        if HOME is not None:
-            default_pwd_file = os.path.join(HOME, '.ssh', AuxTableCopier.canvas_pwd_file)
-            if os.path.exists(default_pwd_file):
-                with open(default_pwd_file, 'r') as fd:
-                    pwd = fd.readline().strip()
-                    return pwd
-            
-        # Ask on console:
-        pwd = getpass.getpass("Password for Canvas database: ")
-        return pwd
-    
     #-------------------------
     # file_nm_from_tble 
     #--------------

@@ -156,7 +156,7 @@ class CanvasPrep(object):
         self.host = host
         
         if pwd is None:
-            pwd = self.utils.get_db_pwd()
+            pwd = self.utils.get_db_pwd(host)
         
         self.pwd = pwd 
         
