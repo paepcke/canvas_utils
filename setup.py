@@ -18,7 +18,7 @@ setup(
     install_requires = ['lxml>=4.2.5',
                         'pymysql_utils>=2.1.4',
                         'nltk>=3.4',
-                        'requests>=2.21.0'
+                        'requests>=2.21.0',
                         ],
 
     #dependency_links = ['https://github.com/DmitryUlyanov/Multicore-TSNE/tarball/master#egg=package-1.0']

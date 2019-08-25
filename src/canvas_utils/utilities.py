@@ -282,12 +282,12 @@ class Utilities(object):
     # log_into_mysql 
     #--------------
             
-    def log_into_mysql(self, user, pwd, db=None, host='localhost'):
+    def log_into_mysql(self, user, pwd, db=None, host='localhost', **kwargs):
         
         try:
             # Try logging in, specifying the database in which all the tables
             # will be created: 
-            db = MySQLDB(user=user, passwd=pwd, db=db, host=host)
+            db = MySQLDB(user=user, passwd=pwd, db=db, host=host, **kwargs)
         except ValueError as e:
             # Does the db not exist yet?
             if str(e).find("OperationalError(1049,") > -1:

@@ -112,7 +112,7 @@ class ConfigInfo(object):
             raise ConfigurationError(f"Cannot read DATABASE:canvas_auxiliary_db_name from {setup_file_name}")  
 
         try:
-            self._test_default_user = config_parser['DATABASE']['default_user']
+            self._default_user = config_parser['DATABASE']['default_user']
         except KeyError:
             raise ConfigurationError(f"Cannot read DATABASE:default_user from {setup_file_name}")
 
