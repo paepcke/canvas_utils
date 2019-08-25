@@ -10,8 +10,8 @@ import logging
 import os
 import sys
 
-from canvas_prep import CanvasPrep
 from utilities import Utilities
+from config_info import ConfigInfo
 
 
 class BackupRemover(object):
@@ -71,13 +71,16 @@ class BackupRemover(object):
         @type unittests: boolean
         '''
 
+        # Get local configuration info:        
+        self.config_info = ConfigInfo()
+        
         # Access to common functionality:
-        self.utils = Utilities()
+        self.utils       = Utilities()
         
         if target_db is None:
-            target_db = CanvasPrep.canvas_db_aux
+            target_db = self.config_info.canvas_db_aux
         
-        if self.num_to_keep is None:
+        if num_to_keep is None:
             self.num_to_keep = BackupRemover.default_num_backups_to_keep,
         else:
             self.num_to_keep = num_to_keep
@@ -87,21 +90,15 @@ class BackupRemover(object):
         # Unittests expect a db name in self.db:
         self.db = target_db
 
-        self.canvas_prepper = CanvasPrep(user=user,
-                                         pwd =pwd,
-                                         target_db=target_db,
-                                         host=host,
-                                         logging_level=logging_level,
-                                         unittests=unittests)
+        self.db_obj = self.utils.log_into_mysql(user, pwd, db=target_db, host=host)
 
         self.utils.setup_logging(logging_level)
-        self.db_obj = self.canvas_prepper.db
         if unittests:
             self.db_name = target_db
             return
         
         # Get names of all tables in the target_db
-        all_tables = self.canvas_prepper.get_existing_tables(return_all=True, target_db=target_db)
+        all_tables = self.utils.get_existing_tables_in_dir(self.db_obj, return_all=True, target_db=target_db)
         
         # If caller specified only specific tables/backup tables to 
         # remove, week out all table names not in caller's list:
@@ -141,7 +138,7 @@ class BackupRemover(object):
         
         # Collect all root names in specific_tables:
         roots = [tbl_name for tbl_name in specific_tables 
-                 if self.canvas_prepper.is_aux_table(tbl_name)]
+                 if self.utils.is_aux_table(tbl_name)]
         
         # Remember root table names, so we can
         # keep all their backup names in the returned list:
@@ -149,8 +146,8 @@ class BackupRemover(object):
         for tbl_nm in table_nm_list:
             # Is it a backup name whose root table name
             # is in the list to consider?
-            if self.canvas_prepper.is_backup_name(tbl_nm) and \
-                self.canvas_prepper.get_root_name(tbl_nm) in roots:
+            if self.utils.is_backup_name(tbl_nm) and \
+                self.utils.get_root_name(tbl_nm) in roots:
                 # Keep the backup name:
                 continue
             # At this pt the table must explicitly be
@@ -178,7 +175,7 @@ class BackupRemover(object):
         backup_tables = {}
         
         for tbl_nm in all_table_names:
-            if self.canvas_prepper.is_aux_table(tbl_nm):
+            if self.utils.is_aux_table(tbl_nm):
                 # Found root of an official table name.
                 # (as apposed to a backup table)
                 if tbl_nm not in backup_tables:
@@ -186,9 +183,9 @@ class BackupRemover(object):
                     backup_tables[tbl_nm] = []
                 continue
             # Is it a backup table name?
-            if self.canvas_prepper.is_backup_name(tbl_nm):
+            if self.utils.is_backup_name(tbl_nm):
                 # Get root of the backup table name:
-                root_nm = self.canvas_prepper.get_root_name(tbl_nm)
+                root_nm = self.utils.get_root_name(tbl_nm)
                 # Add to dict:
                 try:
                     backup_tables[root_nm].append(tbl_nm)
@@ -226,20 +223,25 @@ class BackupRemover(object):
     #--------------
 
     def get_date(self, backup_tbl_nm):
-        (_root, date_str, _dateobj) = CanvasPrep.backup_table_name_components(backup_tbl_nm)
+        (_root, date_str, _dateobj) = self.utils.backup_table_name_components(backup_tbl_nm)
         return date_str
-        
 
     #-------------------------
     # close  
     #--------------
 
     def close(self):
-        self.canvas_prepper.close()
+        try:
+            self.db_obj.close()
+        except Exception:
+            pass
 
 # ----------------------------- Main ------------------------
 
 if __name__ == '__main__':
+
+    # Get default user, db, etc.
+    config_info = ConfigInfo()
     
     parser = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),
                                      formatter_class=argparse.RawTextHelpFormatter,
@@ -251,8 +253,9 @@ if __name__ == '__main__':
                             f'{BackupRemover.default_num_backups_to_keep}',
                         default=BackupRemover.default_num_backups_to_keep)
     parser.add_argument('-u', '--user',
-                        help='user name for logging into the canvas database. Default: {}'.format(CanvasPrep.default_user),
-                        default=CanvasPrep.default_user)
+                        help=f'user name for logging into the canvas database. ' +
+                             f'Default: {config_info.default_user}',
+                        default=config_info.default_user)
                         
     parser.add_argument('-p', '--password',
                         help='password for logging into the canvas database.\n' +

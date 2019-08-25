@@ -9,6 +9,9 @@ import copy
 import os
 import re
 import sys
+
+# NOTE: don't import utilities module here.
+#       would lead to circular import.
       
 class QuerySorter(object):
     '''

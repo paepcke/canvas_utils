@@ -8,21 +8,19 @@ Created on Jan 1, 2019
 import argparse
 import datetime
 import getpass
+import logging
 from os import getenv
 import os
 import pickle
 import pwd
 import re
 import sys
-import logging
 
-from pymysql_utils.pymysql_utils import MySQLDB
-
-from utilities import Utilities
+from canvas_utils_exceptions import DatabaseError
 from clear_old_backups import BackupRemover
 from config_info import ConfigInfo
 from pull_explore_courses import ECPuller
-from query_sorter import QuerySorter, DatabaseError
+from utilities import Utilities
 
 
 class CanvasPrep(object):
@@ -158,12 +156,12 @@ class CanvasPrep(object):
         self.host = host
         
         if pwd is None:
-            pwd = self.get_db_pwd()
+            pwd = self.utils.get_db_pwd()
         
         self.pwd = pwd 
         
         if target_db is None:
-            target_db = CanvasPrep.canvas_db_aux
+            target_db = self.config_info.canvas_db_aux
         else:
             target_db = target_db
             
@@ -175,9 +173,14 @@ class CanvasPrep(object):
             # No particular tables named on command line,
             # So get all .sql file names in Query directory.
             # Names are the table names.
-            CanvasPrep.create_table_name_array()
+            CanvasPrep.tables = self.utils.create_table_name_array()
+
+        # Allow other modules to see which tables are of
+        # concern without having to import CanvasPrep
+        self.utils.tables = CanvasPrep.tables
 
         self.utils.setup_logging(logging_level)
+        self.log_info = self.utils.log_info
         
         # Create list of full paths to table
         # creation sql files:
@@ -192,10 +195,10 @@ class CanvasPrep(object):
         self.log_info('Connecting to db %s@%s.%s...' %\
                       (user, host, CanvasPrep.canvas_db_aux))
                       
-        self.db = self.log_into_mysql(user, 
-                                      self.pwd, 
-                                      db=target_db,
-                                      host=host)
+        self.db = self.utils.log_into_mysql(user, 
+                                            self.pwd, 
+                                            db=target_db,
+                                            host=host)
         
         self.log_info('Done connecting to db.')
         
@@ -222,7 +225,7 @@ class CanvasPrep(object):
         # If self.new_only is true, then only non-existing
         # tables are to be done, else all of them:
         
-        existing_tables = self.get_existing_tables()
+        existing_tables = self.utils.get_existing_tables_in_dir(self.db)
         
         # Back up tables if:
         #   o any tables already exist in the first place AND
@@ -285,7 +288,7 @@ class CanvasPrep(object):
             except Exception as e:
                 self.log_warn(f"Error during database close: {repr(e)}")
         finally:
-            self.shutdown_logging()
+            self.utils.shutdown_logging()
 
     #------------------------------------
     # backup_tables 
@@ -340,91 +343,6 @@ class CanvasPrep(object):
         self.log_info(f"Done renaming {len(table_names)} tables to backup names.")
         return curr_time
               
-    #------------------------------------
-    # restore_from_backup 
-    #------------------- 
-    
-    def restore_from_backup(self, table_root_or_backup_names, db_schema=None):
-        '''
-        Restores backup tables to be the 
-        'current' tables. The parameter may be a single
-        string or a list of strings. Each string may either
-        be a table root name, or an entire backup name.
-        
-        Example 1 a backup table name: 
-            Given Terms_2019_02_10_14_34_10 this method will
-               1. Check that Terms_2019_02_10_14_34_10 exiss.
-               2. If table Terms exists, drop table Terms
-               3. Rename table Terms_2019_02_10_14_34_10 to Terms 
-            If Terms_2019_02_10_14_34_10 does not exist: error
-        
-        Example 2 
-            Given name Terms this method will:
-               1. Find the most recent Term table backup, 
-                  say Terms_2019_02_10_14_34_10.
-               2. If no backup is found, nothing is done.
-               3. Check whether table Terms exists. If
-                  so, Terms is dropped.
-               4. Table Terms_2019_02_10_14_34_10 is renamed
-                  to 'Terms'.
-        
-        Backup tables and non-backup tables may be mixed in
-        the table_root_or_backup_names list parameter
-        
-        @param table_root_or_backup_names: list or singleton 
-        @type table_root_or_backup_names:
-        @param db_schema: the MySQL schema (i.e. database). Default: CanvasPrep.canvas_db_aux
-        @type db_schema: str
-        '''
-    
-        if db_schema is None:
-            db_schema = CanvasPrep.canvas_db_aux
-              
-        if type(table_root_or_backup_names) != list:
-            table_root_or_backup_names = [table_root_or_backup_names]
-        
-        for table_name in table_root_or_backup_names:
-            
-            # Get (aux_tbl_name, data-str, datetime obj) if 
-            # table_name is an aux table backup; else get False:
-            tbl_nm_components = self.is_backup_name(table_name) 
-            if tbl_nm_components:
-                
-                # Got an explicit backup filename to restore:
-                (root_name, _date_str, _datetime_obj) = tbl_nm_components
-                
-                if not self.table_exists(table_name):
-                    raise ValueError(f"Table {table_name} does not exist, so cannot be restored to the working copy.")
-                
-                self.db.dropTable(root_name)
-                (err, _warn) = self.db.execute(f"RENAME TABLE {table_name} TO {root_name};")
-                if err is not None:
-                    raise DatabaseError(f"Cannot restore table {table_name} to table {root_name}: {repr(err)}")
-                
-                continue
-            elif table_name in CanvasPrep.tables:
-                # Table is a root name; find the most recent backup:
-                res = self.db.query(f'''
-                                     select table_name 
-                                       from information_schema.tables
-                                      where table_schema = '{db_schema}'
-                                        AND table_name like '{table_name}%';   
-                                    ''')
-                backup_tbl_names = [tbl_name for tbl_name in res if self.is_backup_name(tbl_name)]
-
-                if len(backup_tbl_names) == 0:
-                    # No backup table available.
-                    self.log_warn(f"No backup table found for table '{table_name}'.")
-                    # Next table name to restore:
-                    continue
-                
-                backup_tbl_names = self.sort_backup_table_names(backup_tbl_names)
-                
-                # Do the rename using the first (and therefore youngest backup 
-                # table name:
-                self.db.dropTable(table_name)
-                self.db.execute(f'''RENAME TABLE {backup_tbl_names[0]} TO {table_name};''')
-               
               
     #------------------------------------
     # remove_backup_tables 
@@ -463,7 +381,7 @@ class CanvasPrep(object):
         # using datetime obj by using sorted()'s 'key' function: 
         backup_table_names_sorted = sorted(backup_table_names,
                                            reverse=True,
-                                           key=lambda tbl_name: CanvasPrep.backup_table_name_components(tbl_name)[2])
+                                           key=lambda tbl_name: self.utils.backup_table_name_components(tbl_name)[2])
         
         num_deleted = 0
         # Remove tables beyond the desired number of keepers:
@@ -637,117 +555,16 @@ class CanvasPrep(object):
     
     def create_quiz_dim(self):
         pass
-    
-    #-------------------------
-    # get_existing_tables 
-    #--------------
-    
-    def get_existing_tables(self, return_all=False, target_db=None):
-        '''
-        Returns list of auxiliary canvas table names that are
-        already in the target db for auxiliary tables. So: even
-        if tables other than the ones listed in CanvasPrep.tables
-        exist in the target db, only members of CanvasPrep.tables
-        are considered. Others are ignored.
-        
-        @param return_all: if true, return_all tables in CanvasPrep.canvas_db_aux
-                Else only the ones listed in CanvasPrep.tables.
-        @type return_all: bool
-        @param target_db: if provided, tables in the given schema
-              are returned. Else table CanvasPrep.canvas_db_aux is
-              assumed
-        @type target_db: str
-        @return: list of tables existing in target db
-        @rtype: [str]
-        '''
-
-        if target_db is None:
-            target_db = CanvasPrep.canvas_db_aux
-        
-        tbl_names_query = f'''
-                          SELECT table_name 
-                            FROM information_schema.tables 
-                           WHERE table_schema = '{target_db}';
-                         '''
-        table_names = [tbl_nm for tbl_nm in self.db.query(tbl_names_query)]
-        
-        if return_all:
-            return table_names
-        
-        # Some versions of MySQL mess with case, so 
-        # normalize our table list for the purpose of 
-        # comparing with tables found:
-        
-        all_relevant_tbls = [tbl_nm.lower() for tbl_nm in CanvasPrep.tables]
-        
-        existing_tbls = []
-        for tbl_name in table_names:
-            if tbl_name.lower() in all_relevant_tbls:
-                existing_tbls.append(tbl_name)
-                
-        return existing_tbls
-        
-    #-------------------------
-    # get_db_pwd
-    #--------------
-
-    def get_db_pwd(self):
-        '''
-        Find appropriate password for logging into MySQL. Normally
-        a file is expected in CanvasPrep.canvas_pwd_file, and
-        the pwd is taken from there.
-        
-        Password convention is different from 
-        normal operation: If passed-in pwd is None
-        and host is localhost, we assume that there
-        is a user 'unittest' without a pwd.
-        
-        '''
-        
-        if self.host == 'localhost':
-            return ''
-        
-        HOME = os.getenv('HOME')
-        if HOME is not None:
-            default_pwd_file = os.path.join(HOME, '.ssh', CanvasPrep.canvas_pwd_file)
-            if os.path.exists(default_pwd_file):
-                with open(default_pwd_file, 'r') as fd:
-                    pwd = fd.readline().strip()
-                    return pwd
+          
             
-        # Ask on console:
-        pwd = getpass.getpass("Password for Canvas database: ")
-        return pwd
-            
-    #-------------------------
-    # log_into_mysql 
-    #--------------
-            
-    def log_into_mysql(self, user, pwd, db=None, host='localhost'):
-        
-        try:
-            # Try logging in, specifying the database in which all the tables
-            # will be created: 
-            db = MySQLDB(user=user, passwd=pwd, db=db, host=host)
-        except ValueError as e:
-            # Does the db not exist yet?
-            if str(e).find("OperationalError(1049,") > -1:
-                # Log in without specifying a db to 'use':
-                db =  MySQLDB(user=user, passwd=pwd, db=db, host=host)
-                # Create the db:
-                db.execute('CREATE DATABASE %s;' % CanvasPrep.canvas_db_aux)
-            else:
-                raise DatabaseError("Cannot open Canvas database: %s" % repr(e))
-        except Exception as e:
-            raise DatabaseError("Cannot open Canvas database: %s" % repr(e))
-        
-        return db
-    
     #-------------------------
     # prep_db 
     #--------------
     
     def prep_db(self):
+        '''
+        Set selected MySQL session configurations.
+        '''
         
         # All SQL is written assuming MySQL's current db is
         # the one where the new tables will be created:
@@ -822,26 +639,6 @@ class CanvasPrep(object):
         this_dir = self.curr_dir
         return os.path.join(this_dir, 'Queries', tbl_nm) + '.sql'
 
-    #-------------------------
-    # create_table_name_array 
-    #--------------
-    
-    @classmethod
-    def create_table_name_array(cls):
-        '''
-        Collect all file names in the Queries subdirectory.
-        Each file name is a table name with '.sql' appended.
-        Chop off that extension to get a table name.
-        
-        Initialize CanvasPrep.tables to be a list of all
-        table names. Also return that list.
-        
-        @return: list of tables that are created by .sql files in the Query directory
-        @rtype: [str]
-        '''
-        query_sorter = QuerySorter()
-        CanvasPrep.tables = query_sorter.sorted_table_names
-        return CanvasPrep.tables
     
     #------------------------------------
     # list_tables 
@@ -915,185 +712,6 @@ class CanvasPrep(object):
         return table_name + '_' + time_now
 
     #------------------------------------
-    # is_aux_table 
-    #-------------------    
-
-    def is_aux_table(self, table_name):
-        '''
-        Returns true if the given table name is one of the
-        aux tables in CanvasPrep.tables.
-        
-        @param table_name: name of table to check
-        @type table_name: str
-        @requires: whether given table is one of the aux tables.
-        @rtype: bool
-        '''
-        return table_name in CanvasPrep.tables
-
-    #------------------------------------
-    # is_backup_name 
-    #-------------------    
-
-    def is_backup_name(self, table_name):
-        '''
-        If the given table name, is a backup name of an aux table,
-        return a triple: the aux table's name, the date-time of
-        the backup as a string, and as a datetime object. 
-        
-        If table_name is not the backup name of an aux table, 
-        return False.
-        
-        @param table_name: name of (potential) aux table backup table
-        @type table_name: str
-        @return: triplet of the aux table name, the date str, and
-            the corresponding datetime object
-        @rtype: (str, str, datetime)
-        '''
-
-        try:
-            (root_name, date_str, datetime_obj) = self.backup_table_name_components(table_name)
-        except ValueError:
-            # The name is not a legal backup table name:
-            return False
-        return (root_name, date_str, datetime_obj)
-    #------------------------------------
-    # get_root_name 
-    #-------------------    
-
-    def get_root_name(self, table_name):
-        '''
-        If given table name is a backup name, return
-        the original table's name: the root name. If 
-        the table name is not a backup name, table_name
-        itself is returned.
-        
-        @param table_name: name to examine
-        @type table_name: str
-        @return: table root name, or table_name itself
-        @rtype: str
-        '''
-        
-        if not self.is_backup_name(table_name):
-            return table_name
-        
-        # Got a backup name:
-        (tbl_root, _tbl_dt_str, _tbl_dt_obj) = self.backup_table_name_components(table_name)
-        return tbl_root
-
-    #------------------------------------
-    # backup_table_name_components
-    #-------------------
-    
-    @classmethod
-    def backup_table_name_components(cls, backup_tbl_name):
-        '''
-        Given a backup table name, return the root table
-        name, the datetime string, and a datetime object from
-        that string.
-
-            input:  foo_2019_05_09_11_51_03
-            return: ('foo', '2019_05_09_11_51_03', datetime.datetime(2019, 5, 9, 11, 51, 3)
-        
-        @param table_backup_name: backup table name created by get_backup_table_name()
-        @type table_backup_name: str
-        @return: table name, datetime string, and datetime object
-        @rtype: (str, str, datetime.datetime)
-        @raise ValueError: if table_backup_name is ill-formed.
-        '''
-        try:
-            # Length of a backup table datetime string is
-            # 19: 'foo_bar_2019_09_03_23_04_10' without the
-            # underscore that separates the table name from
-            # the datetime. First ensure that the end of the
-            # table name is a proper datetime string:
-            try:
-                # Construct regexp to find <aux_table>_<datestr>.
-                # Will find: 'Terms_2019_08_10_09_01_08_387662',
-                # but not:   'Foo_2019_08_10_09_01_08_387662'.
-                # The regex will look like "Terms|Courses|..._<regex for datetime strings>"
-                
-                aux_backup_tbl_regex = f"({'|'.join(CanvasPrep.tables)})_{CanvasPrep.datetime_regx}"
-                
-                # The findall returns an empty array if no match is found. Else
-                # it will return an array with the table name. E.g. ['Terms']:
-                
-                tbl_name = re.findall(aux_backup_tbl_regex, backup_tbl_name)[0]
-            except Exception as _e:
-                raise ValueError(f"Table name {backup_tbl_name} is not a valid backup name.")
-            
-                
-            # Get a datetime obj from just the backup name's date string part:
-            dt_str_part_match_obj = re.search(CanvasPrep.datetime_regx, backup_tbl_name)
-            if dt_str_part_match_obj is None:
-                # Datetime matches the aux_backup_tbl_regex, but is still not a proper datetime:
-                raise ValueError(f"Table name {backup_tbl_name} is not a valid backup name.")
-                
-            # The date str part of the backup name is between the match's start and end: 
-            dt_str = backup_tbl_name[dt_str_part_match_obj.start():dt_str_part_match_obj.end()]
-            try:
-                dt_obj = datetime.datetime.strptime(dt_str, CanvasPrep.datetime_format)
-            except ValueError:
-                # Maybe the date string had no sub-second component? Try
-                # again to get a datatime obj using a no-subsecond datetime format.
-                # if this fails, it will throw a value error:
-                try:
-                    dt_obj = datetime.datetime.strptime(dt_str, CanvasPrep.datetime_format_no_subsecond)
-                except ValueError:
-                    raise ValueError(f"Unrecognized datatime part of name '{backup_tbl_name}'")
-
-            return(tbl_name, dt_str, dt_obj) 
-        except IndexError:
-            raise ValueError(f"Non-conformant backup table name '{backup_tbl_name}'")
-
-    #------------------------------------
-    # sort_backup_table_names 
-    #-------------------    
-    
-    def sort_backup_table_names(self, backup_table_names):
-        '''
-        Given a list of backup table names, return 
-        a new list, sorted by date, most recent first
-        
-        @param backup_table_names: list of table names
-        @type backup_table_names: [str]
-        @returns: sorted list
-        @rtype: [str]
-        '''
-        
-        # Sort the backups by age, most recent first:
-        # Method backup_table_name_components() returns a triplet:
-        # (root_table_name, datetime_str, datetime_obj). Sort
-        # using datetime obj by using sorted()'s 'key' function: 
-        backup_table_names_sorted = sorted(backup_table_names,
-                                           reverse=True,
-                                           key=lambda tbl_name: CanvasPrep.backup_table_name_components(tbl_name)[2])
-        return backup_table_names_sorted
-
-    #------------------------------------
-    # getTblNamesInSchema 
-    #-------------------    
-    
-    def getTblNamesInSchema(self, db, db_schema_name):
-        '''
-        Given a db schema ('database name' in MySQL parlance),
-        return a list of all tables in that db.
-        
-        @param db: pymysql_utils database object
-        @type db: MySQLDB
-        @param db_schema_name: name of MySQL db in which to find tables
-        @type db_schema_name: str
-        @return: list of table names in the given db and schema
-        @rtype: [str]
-        '''
-        tables_res = db.query(f'''
-                              SELECT TABLE_NAME 
-                                FROM information_schema.tables 
-                               WHERE table_schema = '{db_schema_name}';
-                              ''')
-        table_names = [res for res in tables_res]
-        return table_names        
-
-    #------------------------------------
     # find_backup_table_names 
     #-------------------    
         
@@ -1131,7 +749,7 @@ class CanvasPrep(object):
             # a backup table, examine the text name in the list:
             try:
                 (recovered_table_name, _recovered_dt_str, recovered_dt_obj) =\
-                    CanvasPrep.backup_table_name_components(table_name)
+                    self.utils.backup_table_name_components(table_name)
                     
                 # If we didn't get an error, we found a backup table:
                 tables_found.append(table_name)

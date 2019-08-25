@@ -4,28 +4,19 @@ Created on May 1, 2019
 @author: paepcke
 '''
 import datetime
-import getpass
-import os
 import unittest
 
 from pymysql_utils.pymysql_utils import MySQLDB
 
-from canvas_prep import CanvasPrep
 from config_info import ConfigInfo
 from restore_tables import TableRestorer
 from unittest_db_finder import UnittestDbFinder
-
+from utilities import Utilities
 
 TEST_ALL = True
 #TEST_ALL = False
 
 class CanvasRestoreTablesTests(unittest.TestCase):
-
-    test_host = 'localhost'
-    # Production server:
-    # test_host = 'canvasdata-prd-db1.cupga556ks1y.us-west-1.rds.amazonaws.com'
-    # Kathy server:
-    #test_host = 'canvasdata-prd-db1.ci6ilhrc8rxe.us-west-1.rds.amazonaws.com'
 
     #------------------------------------
     # setupClass 
@@ -35,6 +26,8 @@ class CanvasRestoreTablesTests(unittest.TestCase):
     def setUpClass(cls):
         super(CanvasRestoreTablesTests, cls).setUpClass()
         
+        cls.utils = Utilities()
+        cls.utils.setup_logging()
         # Read config file to see which MySQL server test_host we should
         # run the tests on. If setup.py does not exist, copy
         # setupSample.py to setup.py:
@@ -54,7 +47,7 @@ class CanvasRestoreTablesTests(unittest.TestCase):
             db = None
             db = MySQLDB(host=test_host,
                          user=cls.user,
-                         passwd=cls.get_db_pwd(),
+                         passwd=cls.utils.get_db_pwd(test_host),
                          )
             try:
                 db_name = UnittestDbFinder(db).db_name
@@ -90,18 +83,18 @@ class CanvasRestoreTablesTests(unittest.TestCase):
         restore_obj = TableRestorer(host=cls.test_host,
                                     user=cls.user,
                                     target_db='information_schema',
-                                    pwd=cls.get_db_pwd(),
+                                    pwd=cls.utils.get_db_pwd(cls.test_host),
                                     unittests=True
                                     )
         db = restore_obj.db_obj
         db_name = CanvasRestoreTablesTests.unittests_db_nm
-        restore_obj.log_info(f"Removing database '{db_name}'...")
+        cls.utils.log_info(f"Removing database '{db_name}'...")
         try:
             db.execute(f"DROP DATABASE {db_name};")
         except Exception as e:
             raise RuntimeError(f"Could not remove temporary unittest db '{db_name}': {repr(e)}")
         finally:
-            restore_obj.log_info(f"Closing TableRestorer instance.")
+            cls.utils.log_info(f"Closing TableRestorer instance.")
             restore_obj.close()
         
     #-------------------------
@@ -111,11 +104,13 @@ class CanvasRestoreTablesTests(unittest.TestCase):
     def setUp(self):
         unittest.TestCase.setUp(self)
         cls = CanvasRestoreTablesTests
+        self.utils = cls.utils
+        self.db_schema = cls.unittests_db_nm 
         try:
             self.restore_obj = TableRestorer(host=cls.test_host,
                                              user=cls.user,
                                              target_db=cls.unittests_db_nm,
-                                             pwd=cls.get_db_pwd(),
+                                             pwd=self.utils.get_db_pwd(cls.test_host),
                                              unittests=True
                                              )
         except Exception as e:
@@ -201,29 +196,27 @@ class CanvasRestoreTablesTests(unittest.TestCase):
 
         self.removeAllUnittestTables()
         
-        canvas_prep_obj = self.restore_obj.canvas_prepper
-        
         self.db.createTable('Table1', {'foo': 'int'})
-        tbl_names = canvas_prep_obj.get_existing_tables(return_all=True, target_db=self.db_name)
+        tbl_names = self.utils.get_existing_tables_in_dir(self.db, return_all=True, target_db=self.db_name)
         self.assertEqual(tbl_names, ['Table1'])
         
         # Test ignoring all none-aux-table tables:
-        tbl_names = canvas_prep_obj.get_existing_tables(return_all=False, target_db=self.db_name)
+        tbl_names = self.utils.get_existing_tables_in_dir(self.db, return_all=False, target_db=self.db_name)
         self.assertEqual(len(tbl_names), 0)
         
         # Add a second table:
         self.db.createTable('Table2', {'bar': 'int'})
 
-        tbl_names = canvas_prep_obj.get_existing_tables(return_all=True, target_db=self.db_name)
+        tbl_names = self.utils.get_existing_tables_in_dir(self.db, return_all=True, target_db=self.db_name)
         self.assertEqual(tbl_names, ['Table1', 'Table2'])
         
         # Add a legitimate aux table:
         self.db.createTable('Terms', {'fum': 'int'})
         
-        tbl_names = canvas_prep_obj.get_existing_tables(return_all=False, target_db=self.db_name)
+        tbl_names = self.utils.get_existing_tables_in_dir(self.db, return_all=False, target_db=self.db_name)
         self.assertEqual(tbl_names, ['Terms'])
         
-        tbl_names = canvas_prep_obj.get_existing_tables(return_all=True, target_db=self.db_name)
+        tbl_names = self.utils.get_existing_tables_in_dir(self.db, return_all=True, target_db=self.db_name)
         self.assertCountEqual(tbl_names, ['Table1', 'Table2', 'Terms'])
         
         # Another legit table:
@@ -232,7 +225,7 @@ class CanvasRestoreTablesTests(unittest.TestCase):
         
         self.db.dropTable('Table1')
         self.db.dropTable('Table2')
-        tbl_names = canvas_prep_obj.get_existing_tables(return_all=True, target_db=self.db_name)
+        tbl_names = self.utils.get_existing_tables_in_dir(self.db, return_all=True, target_db=self.db_name)
         self.assertCountEqual(tbl_names, ['Terms', 'ModuleItems'])
                 
     #-------------------------
@@ -242,15 +235,13 @@ class CanvasRestoreTablesTests(unittest.TestCase):
     @unittest.skipIf(not TEST_ALL, 'Temporarily skip this test.')
     def testIsBackupName(self):
 
-        canvas_prep_obj = self.restore_obj.canvas_prepper
-        
-        is_backup_name = canvas_prep_obj.is_backup_name('Terms_2019_05_09_11_51_03')
+        is_backup_name = self.utils.is_backup_name('Terms_2019_05_09_11_51_03')
         self.assertTrue(is_backup_name)
         
-        is_backup_name = canvas_prep_obj.is_backup_name('foo_2019_05_09_11_51_03')
+        is_backup_name = self.utils.is_backup_name('foo_2019_05_09_11_51_03')
         self.assertFalse(is_backup_name)
         
-        is_backup_name = canvas_prep_obj.is_backup_name('2019_05_09_11_51_03')
+        is_backup_name = self.utils.is_backup_name('2019_05_09_11_51_03')
         self.assertFalse(is_backup_name)
 
     #-------------------------
@@ -275,7 +266,7 @@ class CanvasRestoreTablesTests(unittest.TestCase):
 #         self.assertEqual(sorted_names, ['Terms_2019_05_09_11_51_03', 'Terms_2018_05_09_11_51_03'])
 
     #-------------------------
-    # testRestoring 
+    # testSomeRestoring 
     #--------------
 
     @unittest.skipIf(not TEST_ALL, 'Temporarily skip this test.')
@@ -325,80 +316,15 @@ class CanvasRestoreTablesTests(unittest.TestCase):
         finally:
             pass
         
-
     # ------------------------------- Utilities -------------------------
 
-    #-------------------------
-    # get_db_pwd
-    #--------------
-
-    @classmethod
-    def get_db_pwd(cls):
-        '''
-        Find appropriate password for logging into MySQL. Normally
-        a file is expected in Class.canvas_pwd_file, and
-        the pwd is taken from there.
-        
-        Password convention is different from 
-        normal operation: If passed-in pwd is None
-        and host is localhost, we assume that there
-        is a user 'unittest' without a pwd.
-        
-        '''
-        
-        if cls.test_host == 'localhost':
-            return ''
-        
-        HOME = os.getenv('HOME')
-        if HOME is not None:
-            default_pwd_file = os.path.join(HOME, '.ssh', cls.canvas_pwd_file)
-            if os.path.exists(default_pwd_file):
-                with open(default_pwd_file, 'r') as fd:
-                    pwd = fd.readline().strip()
-                    return pwd
-            
-        # Ask on console:
-        pwd = getpass.getpass("Password for Canvas database: ")
-        return pwd
-
-    #-------------------------
-    # log_into_mysql 
-    #--------------
-        
-    @classmethod
-    def log_into_mysql(cls, user, pwd, db=None, host='localhost'):
-        
-        user = 'unittest'
-        pwd  = ''
-        host = 'localhost'
-        db   = 'unittest'
-        
-        try:
-            # Try logging in, specifying the database in which all the tables
-            # will be created: 
-            db = MySQLDB(user=user, passwd=pwd, db=db, host=host)
-        except ValueError as e:
-            # Does unittest not exist yet?
-            if str(e).find("OperationalError(1049,") > -1:
-                # Log in without specifying a db to 'use':
-                db =  MySQLDB(user=user, passwd=pwd, host=host)
-                # Create the db:
-                db.execute('CREATE DATABASE %s;' % 'unittest')
-            else:
-                raise RuntimeError("Cannot open Canvas database: %s" % repr(e))
-        except Exception as e:
-            raise RuntimeError("Cannot open Canvas database: %s" % repr(e))
-        
-        return db
-    
-    
     #------------------------------------
     # check_table_existence 
     #-------------------    
     
     def check_table_existence(self, db, _db_schema, num_expected_tables=0):
         # Get remaining tables:
-        table_names = self.getTblNamesInSchema(db, _db_schema)
+        table_names = self.utils.get_tbl_names_in_schema(db, _db_schema)
         
         self.assertEqual(len(table_names), num_expected_tables)
         
@@ -411,33 +337,10 @@ class CanvasRestoreTablesTests(unittest.TestCase):
         Find all tables in the Unittest db,
         and remove them.
         '''
-        tbl_names = self.getTblNamesInSchema(self.db, self.db_name)
+        tbl_names = self.utils.get_tbl_names_in_schema(self.db, self.db_name)
         for tbl_name in tbl_names:
             self.db.dropTable(tbl_name)
     
-    #------------------------------------
-    # getTblNamesInSchema 
-    #-------------------    
-    
-    def getTblNamesInSchema(self, db, db_schema_name):
-        '''
-        Given a db schema ('database name' in MySQL parlance),
-        return a list of all tables in that db.
-        
-        @param db: pymysql_utils database object
-        @type db: MySQLDB
-        @param db_schema_name: name of MySQL db in which to find tables
-        @type db_schema_name: str
-        '''
-        tables_res = db.query(f'''
-                              SELECT TABLE_NAME 
-                                FROM information_schema.tables 
-                               WHERE table_schema = '{db_schema_name}';
-                              ''')
-        table_names = [table_name for table_name in tables_res]
-        return table_names        
-    
-            
     #------------------------------------
     # find_backup_table_names 
     #-------------------    
@@ -476,7 +379,7 @@ class CanvasRestoreTablesTests(unittest.TestCase):
             # a backup table, examine the text name in the list:
             try:
                 (recovered_table_name, _recovered_dt_str, recovered_dt_obj) =\
-                    CanvasPrep.backup_table_name_components(table_name)
+                    self.utils.backup_table_name_components(table_name)
                     
                 # If we didn't get an error, we found a backup table:
                 tables_found.append(table_name)

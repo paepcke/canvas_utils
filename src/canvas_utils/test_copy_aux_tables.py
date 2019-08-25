@@ -6,7 +6,6 @@ TODO:
   o Add test for index on 'text'
 
 '''
-import getpass
 import os
 import unittest
 
@@ -16,6 +15,7 @@ from config_info import ConfigInfo
 from copy_aux_tables import AuxTableCopier
 from copy_aux_tables import Schema
 from unittest_db_finder import UnittestDbFinder
+from utilities import Utilities
 
 
 #from copy_aux_tables import SchemaColumn
@@ -39,6 +39,7 @@ class AuxTableCopyTester(unittest.TestCase):
         # setupSample.py to setup.py:
         
         config_info = ConfigInfo()
+        cls.utils       = Utilities()
         
         test_host       = config_info.test_default_host
         user            = config_info.test_default_user
@@ -46,11 +47,7 @@ class AuxTableCopyTester(unittest.TestCase):
         cls.test_host = test_host
         cls.user      = user
         
-        if test_host == 'localhost':
-            # No password for user unittest:
-            mysql_pwd = cls.mysql_pwd = ''
-        else:
-            mysql_pwd = cls.mysql_pwd = cls.get_db_pwd()
+        mysql_pwd = cls.mysql_pwd = cls.utils.get_db_pwd(test_host)
 
         cls.mysql_pwd = mysql_pwd
         
@@ -108,10 +105,11 @@ class AuxTableCopyTester(unittest.TestCase):
         except Exception as _e:
             pass
         
-        mysql_pwd = AuxTableCopyTester.mysql_pwd
-        test_host = AuxTableCopyTester.test_host
-        user      = AuxTableCopyTester.user
-        self.db_name   = AuxTableCopyTester.db_name
+        mysql_pwd     = AuxTableCopyTester.mysql_pwd
+        test_host     = AuxTableCopyTester.test_host
+        user          = AuxTableCopyTester.user
+        self.utils    = AuxTableCopyTester.utils
+        self.db_name  = AuxTableCopyTester.db_name
         
         self.copier = AuxTableCopier(user=user, 
                                      host=test_host, 
@@ -359,7 +357,7 @@ class AuxTableCopyTester(unittest.TestCase):
     # testCopyOneTable 
     #--------------
     
-    #*****@unittest.skipIf(not TEST_ALL, 'Temporarily skip this test.')
+    @unittest.skipIf(not TEST_ALL, 'Temporarily skip this test.')
     def testCopyOneTable(self):
         
         # Add some rows to the test table:
@@ -551,55 +549,10 @@ class AuxTableCopyTester(unittest.TestCase):
         @param db: db object
         @type db: pymysql_utils
         '''
-        tbl_names = self.getTblNamesInSchema(db, self.db_name)
+        tbl_names = self.utils.get_tbl_names_in_schema(db, self.db_name)
         for tbl_name in tbl_names:
             db.dropTable(tbl_name)
-        
-    #------------------------------------
-    # getTblNamesInSchema 
-    #-------------------    
-    
-    def getTblNamesInSchema(self, db, db_schema_name):
-        '''
-        Given a db schema ('database name' in MySQL parlance),
-        return a list of all tables in that db.
-        
-        @param db: pymysql_utils database object
-        @type db: MySQLDB
-        @param db_schema_name: name of MySQL db in which to find tables
-        @type db_schema_name: str
-        '''
-        tables_res = db.query(f'''
-                              SELECT TABLE_NAME 
-                                FROM information_schema.tables 
-                               WHERE table_schema = '{db_schema_name}';
-                              ''')
-        table_names = [table_name for table_name in tables_res]
-        return table_names        
-    
-    #-------------------------
-    # get_db_pwd 
-    #--------------
-    
-    @classmethod
-    def get_db_pwd(cls):
-        
-        if cls.test_host == 'localhost':
-            return ''
-        
-        HOME = os.getenv('HOME')
-        if HOME is not None:
-            default_pwd_file = os.path.join(HOME, '.ssh', AuxTableCopier.canvas_pwd_file)
-            if os.path.exists(default_pwd_file):
-                with open(default_pwd_file, 'r') as fd:
-                    pwd = fd.readline().strip()
-                    return pwd
             
-        # Ask on console:
-        pwd = getpass.getpass("Password for Canvas database: ")
-        return pwd
-    
-    
 # --------------------------------------- Main -----------------        
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']

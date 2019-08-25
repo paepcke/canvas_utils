@@ -12,6 +12,7 @@ from pymysql_utils.pymysql_utils import MySQLDB
 
 from config_info import ConfigInfo
 from unittest_db_finder import UnittestDbFinder
+from utilities import Utilities
 
 
 TEST_ALL = True
@@ -37,9 +38,10 @@ class FindUnittestDbTester(unittest.TestCase):
         config_info   = ConfigInfo()
         cls.test_host = config_info.test_default_host
         cls.user      = config_info.test_default_user
+        utils         = Utilities()
         
         cls.db = MySQLDB(user=cls.user, 
-                         passwd=cls.get_db_pwd(),  # Assume pwd in in ~/.ssh/canvas_pwd 
+                         passwd=utils.get_db_pwd(cls.test_host),  # Assume pwd in in ~/.ssh/canvas_pwd 
                          db='information_schema', 
                          host=cls.test_host)
     
@@ -128,39 +130,6 @@ class FindUnittestDbTester(unittest.TestCase):
                 print(f"Could not remove unittest db {found_name}: {repr(e)}")
 
 # ------------------------- Utilities -------------------
-
-    #-------------------------
-    # get_db_pwd
-    #--------------
-
-    @classmethod
-    def get_db_pwd(cls):
-        '''
-        Find appropriate password for logging into MySQL. Normally
-        a file is expected in CanvasPrep.canvas_pwd_file, and
-        the pwd is taken from there.
-        
-        Password convention is different from 
-        normal operation: If passed-in pwd is None
-        and host is localhost, we assume that there
-        is a user 'unittest' without a pwd.
-        
-        '''
-        
-        if cls.test_host == 'localhost':
-            return ''
-        
-        HOME = os.getenv('HOME')
-        if HOME is not None:
-            default_pwd_file = os.path.join(HOME, '.ssh', cls.canvas_pwd_file)
-            if os.path.exists(default_pwd_file):
-                with open(default_pwd_file, 'r') as fd:
-                    pwd = fd.readline().strip()
-                    return pwd
-            
-        # Ask on console:
-        pwd = getpass.getpass("Password for Canvas database: ")
-        return pwd
                 
 # ----------------------------- Main ------------------
 

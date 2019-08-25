@@ -7,6 +7,7 @@ import unittest
 
 from clear_old_backups import BackupRemover
 from config_info import ConfigInfo
+from utilities import Utilities
 
 
 TEST_ALL = True
@@ -24,15 +25,19 @@ class ClearBackupTablesTester(unittest.TestCase):
         super(ClearBackupTablesTester, cls).setUpClass()
         cls.num_to_keep = 1
         
+        cls.utils = Utilities()
         # Get whether to test on localhost, or on 
         # remote host:
         
         config_info = ConfigInfo()
-        cls.test_host = config_info.test_default_host
-        cls.user = config_info.test_default_user
+        test_host = config_info.test_default_host
+        user = config_info.test_default_user
         
         cls.tbl_remover = BackupRemover(num_to_keep=cls.num_to_keep,
-                                        target_db=('unittest' if cls.test_host=='localhost' else None),
+                                        user=user,
+                                        host=test_host,
+                                        pwd=cls.utils.get_db_pwd(test_host),
+                                        target_db=('unittest' if test_host=='localhost' else None),
                                         unittests=True)
     
     #-------------------------
@@ -48,10 +53,10 @@ class ClearBackupTablesTester(unittest.TestCase):
     #--------------
         
     def setUp(self):
+        self.utils = ClearBackupTablesTester.utils
         self.tbl_remover = ClearBackupTablesTester.tbl_remover
         self.db_obj = self.tbl_remover.db_obj
         self.db_name = self.db_obj.dbName()
-        self.canvas_prepper = self.tbl_remover.canvas_prepper
 
     #-------------------------
     # testFindTablesToConsider
@@ -123,7 +128,7 @@ class ClearBackupTablesTester(unittest.TestCase):
         self.createTestDb()
         
         # All there?
-        table_names = self.canvas_prepper.getTblNamesInSchema(self.db_obj, self.db_name)
+        table_names = self.utils.get_tbl_names_in_schema(self.db_obj, self.db_name)
         self.assertEqual(len(table_names), 4)
 
 # ------------------------- Utilities --------------------
@@ -140,15 +145,15 @@ class ClearBackupTablesTester(unittest.TestCase):
         @param db: db object
         @type db: pymysql_utils
         '''
-        tbl_names = self.getTblNamesInSchema(db, self.db_name)
+        tbl_names = self.get_tbl_names_in_schema(db, self.db_name)
         for tbl_name in tbl_names:
             db.dropTable(tbl_name)
 
     #------------------------------------
-    # getTblNamesInSchema 
+    # get_tbl_names_in_schema 
     #-------------------    
     
-    def getTblNamesInSchema(self, db, db_schema_name):
+    def get_tbl_names_in_schema(self, db, db_schema_name):
         '''
         Given a db schema ('database name' in MySQL parlance),
         return a list of all tables in that db.

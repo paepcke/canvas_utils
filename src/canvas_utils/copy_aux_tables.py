@@ -103,6 +103,8 @@ class AuxTableCopier(object):
                 AuxTableCopier.canvas_db_aux = unittest_db_name
         
         self.utils.setup_logging(logging_level)
+        # For convenience:
+        self.log_info = self.utils.log_info
         
         if user is None:
             self.user = AuxTableCopier.default_user
@@ -170,7 +172,7 @@ class AuxTableCopier(object):
         # nothing will be copied: 
         
         if tables is None or len(tables) == 0:
-            self.tables = CanvasPrep.create_table_name_array() 
+            self.tables = self.utils.create_table_name_array() 
         else:
             # Note: could be empty table, in which
             # case nothing will be copied. Used for
@@ -184,7 +186,7 @@ class AuxTableCopier(object):
         # initialize a dict of tables alreay done. The dict
         # is a persistent object:
         
-        self.completed_tables = self.get_existing_tables(set(tables))
+        self.completed_tables = self.get_existing_tables_in_dir(self.db, set(tables))
 
     #-------------------------
     # PROPERTY: schema 
@@ -216,7 +218,7 @@ class AuxTableCopier(object):
         else:
             self.log_info(f"NOTE: only copying tables not already in {self.dest_dir}. Use --all to replace all.")
             
-        existing_tables = self.get_existing_tables(table_names)
+        existing_tables = self.get_existing_tables_in_dir(table_names)
         
         # Delete existing files, if requested to do so:
         if overwrite_existing:
@@ -563,15 +565,15 @@ class AuxTableCopier(object):
         if table_list_set is None:
             table_list_set = set(self.tables)
         
-        tables_done_set = self.get_existing_tables(table_list_set)
+        tables_done_set = self.get_existing_tables_in_dir(table_list_set)
         tables_to_do_set = table_list_set - tables_done_set
         return tables_to_do_set
         
     #------------------------------------
-    # get_existing_tables 
+    # get_existing_tables_in_dir 
     #-------------------    
         
-    def get_existing_tables(self, table_name_set):
+    def get_existing_tables_in_dir(self, table_name_set):
         '''
         Return name of tables whose .csv or .sql files
         are in the target directory.
