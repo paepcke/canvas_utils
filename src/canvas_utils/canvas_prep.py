@@ -529,8 +529,8 @@ class CanvasPrep(object):
         
         puller = ECPuller(ec_xml_path,
                           overwrite_existing=True,
-                          log_level=self.logger.level,
-                          logger=self.logger
+                          log_level=self.utils.logger.level,
+                          logger=self.utils.logger
                           )
         # Do the retrieval of a new .xml file from
         # the HTTP server:
