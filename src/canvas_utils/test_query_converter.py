@@ -50,8 +50,8 @@ class QueryConverterTester(unittest.TestCase):
         # Convert file that has '<canvas_aux>' in it:
         aux_repl_file = os.path.join(self.test_files_dir, 'query_conv_aux.sql')
         aux_dest_file = os.path.join(self.test_dest_dir_name, os.path.basename(aux_repl_file))
-        _converter = QueryConverter('canvasdata_prd', 
-                                    'canvasdata_aux', 
+        _converter = QueryConverter('new_canvasdata_prd', 
+                                    'new_canvasdata_aux', 
                                     '/tmp',
                                     files_to_replace=aux_repl_file,
                                     dest_dir=self.test_dest_dir_name)
@@ -62,8 +62,8 @@ class QueryConverterTester(unittest.TestCase):
         # Convert file that has '<canvas_prd>' in it:
         aux_repl_file = os.path.join(self.test_files_dir, 'query_conv_prd.sql')
         aux_dest_file = os.path.join(self.test_dest_dir_name, os.path.basename(aux_repl_file))
-        _converter = QueryConverter('canvasdata_prd', 
-                                    'canvasdata_aux', 
+        _converter = QueryConverter('new_canvasdata_prd', 
+                                    'new_canvasdata_aux', 
                                     '/tmp',
                                     files_to_replace=aux_repl_file,
                                     dest_dir=self.test_dest_dir_name)
@@ -72,22 +72,10 @@ class QueryConverterTester(unittest.TestCase):
         self.assertTrue(filecmp.cmp(dst_truth_file, aux_dest_file))
 
         # Convert file that has '<canvas_prd>' in it:
-        aux_repl_file = os.path.join(self.test_files_dir, 'query_conv_data_dir.sql')
-        aux_dest_file = os.path.join(self.test_dest_dir_name, os.path.basename(aux_repl_file))
-        _converter = QueryConverter('canvasdata_prd', 
-                                    'canvasdata_aux', 
-                                    '/tmp',
-                                    files_to_replace=aux_repl_file,
-                                    dest_dir=self.test_dest_dir_name)
-        # Get the true value
-        dst_truth_file = os.path.join(self.test_files_dir, 'query_conv_data_dir_truth.sql')
-        self.assertTrue(filecmp.cmp(dst_truth_file, aux_dest_file))
-
-        # Convert file that has '<canvas_prd>' in it:
         aux_repl_file = os.path.join(self.test_files_dir, 'query_conv_all.sql')
         aux_dest_file = os.path.join(self.test_dest_dir_name, os.path.basename(aux_repl_file))
-        _converter = QueryConverter('canvasdata_prd', 
-                                    'canvasdata_aux', 
+        _converter = QueryConverter('new_canvasdata_prd', 
+                                    'new_canvasdata_aux', 
                                     '/tmp',
                                     files_to_replace=aux_repl_file,
                                     dest_dir=self.test_dest_dir_name)
