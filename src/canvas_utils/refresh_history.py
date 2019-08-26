@@ -5,6 +5,8 @@ Created on Aug 24, 2019
 @author: paepcke
 '''
 import math
+import sys
+
 from pymysql_utils.pymysql_utils import Cursors
 
 from config_info import ConfigInfo
@@ -89,13 +91,13 @@ class LoadHistoryLister(object):
         # Sort the dicts by table name:
         sorted_tbl_dicts = sorted(tbl_dicts, key=lambda one_dict: one_dict['tbl_name'])
         
-        print(f"\nAux tables in {self.aux_db}:")
+        print(f"\nAux tables in {self.aux_db}:\n")
         
         tbl_nm_header    = 'Table Name'
         load_time_header = 'Last Refreshed'
         num_rows_header  = 'Num Rows'
         # Print the header:
-        print(f'{tbl_nm_header:^30} {load_time_header:^20} {num_rows_header:^5}')
+        print(f'{tbl_nm_header:>30} {load_time_header:^20} {num_rows_header:^5}')
         
         # For each result dict, pull out the table name,
         # time refreshed, and number of rows. Assign them
@@ -229,6 +231,11 @@ class LoadHistoryLister(object):
 # ----------------------- Main -------------
         
 if __name__ == '__main__':
+    
+    usage = "Lists the available aux tables, and the ones that are missing. No options."
+    if len(sys.argv) > 1 and (sys.argv[1] == '-h' or sys.argv[1] == '--help'):
+        print(usage)
+        sys.exit(1)
     LoadHistoryLister() 
     #LoadHistoryLister(unittests=True) 
         
