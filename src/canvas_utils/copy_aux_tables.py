@@ -136,7 +136,7 @@ class AuxTableCopier(object):
         # Find the mysql executable. Normally not a problem,
         # but if running in Eclipse for debugging, the executable
         # isn't findable:
-        self.mysql_path = self.get_mysql_path()
+        self.mysql_path = self.utils.get_mysql_path()
         
         # The db obj:
         self.db = None
@@ -614,52 +614,6 @@ class AuxTableCopier(object):
             if self.copy_format == 'sql' \
             else os.path.join(self.dest_dir, tbl_nm) + '.csv'
 
-    #-------------------------
-    # get_mysql_path 
-    #--------------
-
-    def get_mysql_path(self):
-        '''
-        Only relevant if running in Eclipse for debugging. 
-        In Eclipse the shell PATH is not available. So 
-        subprocess() won't find mysql, even with shell==True.
-        
-        So: if we are not in Eclipse, we find the mysql path
-        with a simple 'which'. Else we guess.
-        
-        @return: Location of mysql program executable
-        @rtype: str
-        @raise RuntimeError: if executable is not found.
-        '''
-
-        # Eclipse puts extra info into the env:
-        eclipse_indicator = os.getenv('XPC_SERVICE_NAME')
-        
-        # If the indicator is absent, or it doesn't include
-        # the eclipse info, then we are not in Eclipse; the usual
-        # case, of course:
-        
-        if eclipse_indicator is None or \
-           eclipse_indicator == '0' or \
-           eclipse_indicator.find('eclipse') == -1:
-            # Not running in Eclipse; use reliable method to find mysql:
-            mysql_loc = shutil.which('mysql')
-            if mysql_loc is None:
-                raise RuntimeError("MySQL client not found on this machine (%s)" % socket.gethostname())
-        else:
-            # We are in Eclipse:
-            possible_paths = ['/usr/local/bin/mysql',
-                              '/usr/local/mysql/bin/mysql',
-                              '/usr/bin/mysql',
-                              '/bin/mysql']
-            for path in possible_paths:
-                if os.path.exists(path):
-                    mysql_loc = path
-                    break
-            if mysql_loc is None:
-                raise RuntimeError("MySQL client not found on this machine (%s)" % socket.gethostname())
-        return mysql_loc
-    
    
 # -------------------------- Class CopyResult ---------------
 
