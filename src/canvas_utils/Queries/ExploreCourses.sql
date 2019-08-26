@@ -1,4 +1,4 @@
-# data_dir='/home/paepcke/Code/canvas_utils/src/canvas_utils/Data/explore_courses.csv'
+SET @data_dir='/tmp/explore_courses.csv';
 
 DROP TABLE IF EXISTS ExploreCourses;
 CREATE TABLE ExploreCourses (
@@ -24,7 +24,7 @@ CREATE TABLE ExploreCourses (
 # the string assigned to 'data_dir' in the comment at
 # the top:
 
-LOAD DATA LOCAL INFILE '/home/paepcke/Code/canvas_utils/src/canvas_utils/Data/explore_courses.csv'
+LOAD DATA LOCAL INFILE @data_dir
  INTO TABLE ExploreCourses
   FIELDS TERMINATED BY "," OPTIONALLY ENCLOSED BY '"' LINES TERMINATED BY '\n'
   IGNORE 1 LINES;
