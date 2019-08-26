@@ -551,7 +551,7 @@ class CanvasPrep(object):
                             	 WHERE table_schema = '{curr_db_schema}'
                             	   AND table_name = '{tbl_nm}';
         ''')
-        num_rows = res.next)(
+        num_rows = res.next()
              
         # Make the entry:
         (err, _warn) = self.db.execute(f'''INSERT INTO {curr_db_schema}.{load_log_tbl_nm} (tbl_name, num_rows)
