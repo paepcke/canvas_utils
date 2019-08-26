@@ -53,7 +53,8 @@ class CanvasUtilsTests(unittest.TestCase):
             db = None
             db = MySQLDB(host=test_host,
                          user=config_info.test_default_user,
-                         passwd=cls.utils.get_db_pwd(test_host)
+                         passwd=cls.utils.get_db_pwd(test_host,
+                                                     unittests=True)
                          )
             try:
                 db_name = UnittestDbFinder(db).db_name
@@ -86,7 +87,8 @@ class CanvasUtilsTests(unittest.TestCase):
         prep_obj = CanvasPrep(host=cls.test_host,
                               user=cls.user,
                               target_db=db_name,
-                              pwd=cls.utils.get_db_pwd(cls.test_host),
+                              pwd=cls.utils.get_db_pwd(cls.test_host,
+                                                       unittests=True),
                               unittests=True
                               )
 
@@ -117,7 +119,8 @@ class CanvasUtilsTests(unittest.TestCase):
         self.prep_obj  = CanvasPrep(user=self.user, 
                               host=self.test_host, 
                               target_db=self.db_schema,
-                              pwd=self.utils.get_db_pwd(self.test_host),
+                              pwd=self.utils.get_db_pwd(self.test_host,
+                                                        unittests=True),
                               unittests=True)
         self.db        = self.prep_obj.db
         self.utils     = CanvasUtilsTests.utils
@@ -230,7 +233,8 @@ class CanvasUtilsTests(unittest.TestCase):
         
         restorer = TableRestorer(
                      user=self.user,
-                     pwd=self.utils.get_db_pwd(self.test_host), 
+                     pwd=self.utils.get_db_pwd(self.test_host,
+                                               unittests=True), 
                      target_db=self.db_schema, 
                      host=self.test_host,
                      unittests=True)     

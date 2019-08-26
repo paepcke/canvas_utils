@@ -36,7 +36,8 @@ class ClearBackupTablesTester(unittest.TestCase):
         cls.tbl_remover = BackupRemover(num_to_keep=cls.num_to_keep,
                                         user=user,
                                         host=test_host,
-                                        pwd=cls.utils.get_db_pwd(test_host),
+                                        pwd=cls.utils.get_db_pwd(test_host,
+                                                                 unittests=True),
                                         target_db=('unittest' if test_host=='localhost' else None),
                                         unittests=True)
     

@@ -248,22 +248,32 @@ class Utilities(object):
     # get_db_pwd
     #--------------
 
-    def get_db_pwd(self, host):
+    def get_db_pwd(self, host, unittests=False):
         '''
         Find appropriate password for logging into MySQL. Normally
         a file is expected in CanvasPrep.canvas_pwd_file, and
         the pwd is taken from there.
         
+        In future we may use the host parameter to
+        select different password files in $HOME/.ssh,
+        depending on the destination host. Currently
+        we always assume the file in setup.cfg under
+        canvas_pwd_file.  
+        
         Password convention is different from 
-        normal operation: If passed-in pwd is None
-        and host is localhost, we assume that there
-        is a user 'unittest' without a pwd.
+        normal operation: for tests on localhost
+        we assume that there is a user 'unittest' 
+        without a pwd, and access only to database
+        Unittest.
         
         @param host: name of server where MySQL service resides
         @type host: str
+        @param unittests: whether or not caller is running
+            unittests.
+        @type: bool
         '''
         
-        if host == 'localhost':
+        if host == 'localhost' and unittests:
             return ''
         
         HOME = os.getenv('HOME')

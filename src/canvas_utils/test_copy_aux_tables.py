@@ -47,7 +47,8 @@ class AuxTableCopyTester(unittest.TestCase):
         cls.test_host = test_host
         cls.user      = user
         
-        mysql_pwd = cls.mysql_pwd = cls.utils.get_db_pwd(test_host)
+        mysql_pwd = cls.mysql_pwd = cls.utils.get_db_pwd(test_host,
+                                                         unittests=True)
 
         cls.mysql_pwd = mysql_pwd
         

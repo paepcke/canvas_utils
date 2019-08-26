@@ -47,7 +47,8 @@ class CanvasRestoreTablesTests(unittest.TestCase):
             db = None
             db = MySQLDB(host=test_host,
                          user=cls.user,
-                         passwd=cls.utils.get_db_pwd(test_host),
+                         passwd=cls.utils.get_db_pwd(test_host,
+                                                     unittests=True),
                          )
             try:
                 db_name = UnittestDbFinder(db).db_name
@@ -83,7 +84,8 @@ class CanvasRestoreTablesTests(unittest.TestCase):
         restore_obj = TableRestorer(host=cls.test_host,
                                     user=cls.user,
                                     target_db='information_schema',
-                                    pwd=cls.utils.get_db_pwd(cls.test_host),
+                                    pwd=cls.utils.get_db_pwd(cls.test_host,
+                                                             unittests=True),
                                     unittests=True
                                     )
         db = restore_obj.db_obj
@@ -110,7 +112,8 @@ class CanvasRestoreTablesTests(unittest.TestCase):
             self.restore_obj = TableRestorer(host=cls.test_host,
                                              user=cls.user,
                                              target_db=cls.unittests_db_nm,
-                                             pwd=self.utils.get_db_pwd(cls.test_host),
+                                             pwd=self.utils.get_db_pwd(cls.test_host,
+                                                                       unittests=True),
                                              unittests=True
                                              )
         except Exception as e:

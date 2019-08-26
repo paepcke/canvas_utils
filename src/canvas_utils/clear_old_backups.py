@@ -77,13 +77,25 @@ class BackupRemover(object):
         # Access to common functionality:
         self.utils       = Utilities()
         
+        if user is None:
+            user = config_info.default_user
+        
+        if host is None:
+            host = config_info.default_host
+        
+        if pwd is None:
+            pwd = self.utils.get_db_pwd(host, unittests)
+        
         if target_db is None:
             target_db = self.config_info.canvas_db_aux
+
+        self.target_db = target_db
         
         if num_to_keep is None:
             self.num_to_keep = BackupRemover.default_num_backups_to_keep,
         else:
             self.num_to_keep = num_to_keep
+            
         # Better name for tables to consider removing:
         tables_to_consider = tables
         
@@ -105,6 +117,7 @@ class BackupRemover(object):
         all_tables_to_consider = self.find_tables_to_consider(all_tables, tables_to_consider)
         
         self.remove_old_backups(all_tables_to_consider)
+        self.close()
 
     #-------------------------
     # find_tables_to_consider 
@@ -217,6 +230,9 @@ class BackupRemover(object):
                 continue
             for to_delete in backup_nm_list[self.num_to_keep:]:
                 self.db_obj.dropTable(to_delete)
+                self.utils.log_info(f"Removing old backup table {to_delete}")
+        
+        self.utils.log_info(f"In {self.target_db}: no more than {self.num_to_keep} backup tables left per table.")
 
     #-------------------------
     # get_date
@@ -253,7 +269,7 @@ if __name__ == '__main__':
                             f'{BackupRemover.default_num_backups_to_keep}',
                         default=BackupRemover.default_num_backups_to_keep)
     parser.add_argument('-u', '--user',
-                        help=f'user name for logging into the canvas database. ' +
+                        help=f'user name for logging into the canvas database.\n' +
                              f'Default: {config_info.default_user}',
                         default=config_info.default_user)
                         
@@ -264,9 +280,8 @@ if __name__ == '__main__':
                         default=None)
                         
     parser.add_argument('-o', '--host',
-                        help='host name or ip of database. Default: Canvas production database.',
-                        default='canvasdata-prd-db1.ci6ilhrc8rxe.us-west-1.rds.amazonaws.com')
-                        #default='canvasdata-prd-db1.cupga556ks1y.us-west-1.rds.amazonaws.com')
+                        help=f'host name or ip of database. Default: {config_info.default_host}',
+                        default=config_info.default_host)
                         
     parser.add_argument('-t', '--table',
                         nargs='+',
@@ -277,8 +292,8 @@ if __name__ == '__main__':
 
     parser.add_argument('-d', '--database',
                         help='MySQL/Aurora database (schema) into which new tables are \n' +
-                             'to be placed. Default: canvasdata_aux',
-                        default='canvasdata_aux')
+                             f'to be placed. Default: {config_info.canvas_db_aux}',
+                        default=f'{config_info.canvas_db_aux}')
     
     args = parser.parse_args();
     BackupRemover(args.num_to_keep,

@@ -41,7 +41,8 @@ class FindUnittestDbTester(unittest.TestCase):
         utils         = Utilities()
         
         cls.db = MySQLDB(user=cls.user, 
-                         passwd=utils.get_db_pwd(cls.test_host),  # Assume pwd in in ~/.ssh/canvas_pwd 
+                         passwd=utils.get_db_pwd(cls.test_host,
+                                                 unittests=True),
                          db='information_schema', 
                          host=cls.test_host)
     

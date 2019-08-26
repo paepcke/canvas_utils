@@ -82,7 +82,7 @@ class AuxTableCopier(object):
         @type logging_level: logging.INFO/DEBUG/ERROR/...
         @param unittests: set to True to do nothing significant, and let 
             unittests call methods in isolation.
-        @type unittests.
+        @type bool.
         @param: unittests_db_nm: Only relevant if unittests is True. Name of
             database where unittests will be performed.
         
@@ -100,6 +100,7 @@ class AuxTableCopier(object):
             else:
                 AuxTableCopier.canvas_db_aux = unittest_db_name
         
+        self.unittests = unittests
         self.utils.setup_logging(logging_level)
         # For convenience:
         self.log_info = self.utils.log_info
@@ -145,10 +146,8 @@ class AuxTableCopier(object):
         # for this quantity: 
         self.__schema = None
 
-        self.pwd = self.utils.get_db_pwd(self.host)
+        self.pwd = self.utils.get_db_pwd(self.host, unittests)
         if unittests:
-            
-            
             
             # In case the connect_to_src_db() call
             # below fails, ensure that self.db isn't
@@ -279,7 +278,7 @@ class AuxTableCopier(object):
                                   else cmd_fragment 
                         for cmd_fragment 
                         in bash_cmd]
-            pwd = self.utils.get_db_pwd(self.host) 
+            pwd = self.utils.get_db_pwd(self.host, self.unittests) 
             bash_cmd = [pwd if cmd_fragment == '<pwd>' 
                                   else cmd_fragment 
                         for cmd_fragment 
@@ -501,7 +500,7 @@ class AuxTableCopier(object):
             host = self.host
 
         if pwd is None:
-            pwd = self.utils.get_db_pwd(host)    
+            pwd = self.utils.get_db_pwd(host, self.unittests)    
         self.log_info(f'Connecting to db {user}@{host}:{src_db}...')
                        
         if src_db is None:

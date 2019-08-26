@@ -1,15 +1,14 @@
+#!/usr/bin/env python
 '''
 Created on Aug 24, 2019
 
 @author: paepcke
 '''
+import math
+from pymysql_utils.pymysql_utils import Cursors
 
-import configparser
-import os
-
-from pymysql_utils.pymysql_utils import MySQLDB
-
-from canvas_utils_exceptions import DatabaseError
+from config_info import ConfigInfo
+from utilities import Utilities
 
 
 class LoadHistoryLister(object):
@@ -19,98 +18,217 @@ class LoadHistoryLister(object):
     and list of all tables.
     '''
 
+    load_table_name = 'LoadLog'
+    
     #-------------------------
     # Constructor 
     #--------------
 
-    def __init__(self):
+    def __init__(self, unittests=False):
         '''
         Constructor
         '''
-        # Read any configs from the config file, if it exists:
-        self.read_configuration()
-        self.prep_db()
-
-    #-------------------------
-    # read_configuration 
-    #--------------
-    
-    def read_configuration(self):
+        config_info = ConfigInfo()
+        self.utils  = Utilities()
         
-        config_parser = configparser.ConfigParser()
-        config_parser.read(os.path.join(proj_root_dir, 'setup.cfg'))
+        # For convenience:
+        self.load_table_name = LoadHistoryLister.load_table_name
+        if unittests:
+            self.aux_db = 'Unittest'
+        else:
+            self.aux_db = config_info.canvas_db_aux
         
-        try:
-            default_host = config_parser['DATABASE']['default_host']
-        except KeyError:
-            raise 
-
-        try:
-            canvas_db_aux = config_parser['DATABASE']['canvas_auxiliary_db_name']
-        except KeyError:
-            pass
-
-        try:
-            default_user = config_parser['DATABASE']['default_user']
-        except KeyError:
-            pass
-        
-
-    #-------------------------
-    # log_into_mysql 
-    #--------------
+        # Get results as dictionaries:
+        if unittests:
+            self.db_obj = self.utils.log_into_mysql(config_info.test_default_user,
+                                                    self.utils.get_db_pwd(config_info.test_default_host,
+                                                                          unittests),
+                                                    db=self.aux_db,
+                                                    host=config_info.test_default_host,
+                                                    cursor_class = Cursors.DICT
+                                                    )
+        else:
+            self.db_obj = self.utils.log_into_mysql(config_info.default_user,
+                                                    self.utils.get_db_pwd(config_info.default_host,
+                                                                          unittests),
+                                                    db=config_info.canvas_db_aux,
+                                                    host=config_info.default_host,
+                                                    cursor_class = Cursors.DICT
+                                                    )
             
-    def log_into_mysql(self, user, pwd, db=None, host='localhost'):
-        
         try:
-            # Try logging in, specifying the database in which all the tables
-            # will be created: 
-            db = MySQLDB(user=user, passwd=pwd, db=db, host=host)
-        except ValueError as e:
-            # Does the db not exist yet?
-            if str(e).find("OperationalError(1049,") > -1:
-                # Log in without specifying a db to 'use':
-                db =  MySQLDB(user=user, passwd=pwd, db=db, host=host)
-            else:
-                raise DatabaseError("Cannot open Canvas database: %s" % repr(e))
-        except Exception as e:
-            raise DatabaseError("Cannot open Canvas database: %s" % repr(e))
+            success = self.print_latest_refresh()
+            if success:
+                self.print_missing_tables()
+            # self.backup_availability()
+        finally:
+            self.db_obj.close()
         
-        return db
-    
     #-------------------------
-    # prep_db 
+    # print_latest_refresh 
     #--------------
     
-    def prep_db(self):
+    def print_latest_refresh(self):
+        '''
+        Pretty print a list of aux tables that exist in 
+        the database.
         
-        # All SQL is written assuming MySQL's current db is
-        # the one where the new tables will be created:
-        (err, _warn) = self.db.execute('USE %s' % CanvasPrep.canvas_db_aux)
-        if err is not None:
-            raise DatabaseError(f"Cannot switch to db {CanvasPrep.canvas_db_aux}: {repr(err)}")
+        @return: True for success, False for failure
+        @rtype: bool
+        '''
+        
+        try:
+            tbl_content = self.db_obj.query(f"SELECT * FROM {self.aux_db}.{self.load_table_name}")
+        except ValueError as e:
+            print(f"Cannot list tables: {repr(e)}")
+            return False
+            
+        # Pull all row-dicts out from the query result:
+        tbl_dicts   = [tbl_dict for tbl_dict in tbl_content]
+        
+        # Sort the dicts by table name:
+        sorted_tbl_dicts = sorted(tbl_dicts, key=lambda one_dict: one_dict['tbl_name'])
+        
+        print(f"\nAux tables in {self.aux_db}:")
+        
+        tbl_nm_header    = 'Table Name'
+        load_time_header = 'Last Refreshed'
+        num_rows_header  = 'Num Rows'
+        # Print the header:
+        print(f'{tbl_nm_header:^30} {load_time_header:^20} {num_rows_header:^5}')
+        
+        # For each result dict, pull out the table name,
+        # time refreshed, and number of rows. Assign them
+        # to variables:
+        
+        for tbl_entry_dict in sorted_tbl_dicts:
+            tbl_nm       = tbl_entry_dict['tbl_name']
+            time_loaded  = str(tbl_entry_dict['time_refreshed']) 
+            num_rows     = tbl_entry_dict['num_rows'] 
 
+            # The ':>30' is "right-justfy; allow 30 chars.
+            # The '^20'  is "center-justfy; allow 20 chars.
+            print(f"{tbl_nm:>30}   {time_loaded:^20} {num_rows:^5}")
+          
+        return True
+      
+    #-------------------------
+    # print_missing_tables 
+    #--------------
+
+    def print_missing_tables(self, num_cols=4):
+        '''
+        Print the tables that are missing in the 
+        aux tables database. Print in column form,
+        alpha sorted.
         
-        # MySQL 8 started to complain when functions do not 
-        # specify DETERMINISTIC or NO_SQL, or one of several other
-        # function characteristics. Avoid that complaint:
+        @param num_cols: number of table names in one row
+        @type num_cols: int
+        @return: True for success, False for failure
+        @rtype: bool
+        '''
+
+        all_tables     = set(self.utils.create_table_name_array())
+        tables_present = self.utils.get_tbl_names_in_schema(self.db_obj, self.aux_db)
+        tables_present = set([table_dict['TABLE_NAME'] for table_dict in tables_present])
+
+        missing_tables = all_tables - tables_present
+        if len(missing_tables) == 0:
+            print("No missing tables.")
+            return True
         
-        (err, _warn) = self.db.execute("SET GLOBAL log_bin_trust_function_creators = 1;")
-        if err is not None:
-            self.log_warn(f"Cannot set global log_bin_trus_function_creators: {repr(err)}")
+        sorted_missing_tables = sorted(missing_tables)
         
+        # Want to list in col_num columns, with alpha
+        # order going down columns. Ex. For tables 
+        # named 1,2,...,0, want to print:
+        #
+        #   1  5   9  13
+        #   2  6  10  14 
+        #   3  7  11  15
+        #   4  8  12  16
         
-        # At least for MySQL 8.x we need to allow zero dates,
-        # like '0000-00-00 00:00:00', which is found in the Canvas db:
+        # Number of needed rows; the ceiling is for
+        # the last row, which may not be all filled:
         
-        (err, _warn) = self.db.execute('SET sql_mode="ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION";')
-        if err is not None:
-            self.log_warn(f"Cannot set sql_mode: {repr(err)}")
+        num_rows = math.ceil(len(sorted_missing_tables) / num_cols)
+
+        # Get chunks of sorted table names 
+        # with chunk size being the number
+        # of rows we'll have. For 22 elements:
+        #
+        # cols_matrix = [[ 1, 2, 3, 4, 5, 6,],
+        #                [ 7, 8, 9,10,11,12,],
+        #                [13,14,15,16,17,18],
+        #                [19,20,21,22]
+        #               ]
+
+        rows_it      = self.list_chopper(sorted_missing_tables, num_rows)
+        cols_matrix  = [cols for cols in rows_it]
+
+        # Ensure the last row is either full, or
+        # filled with a space string in each empty
+        # column:
+        cols_matrix[-1] = self.fill_list_with_spaces(cols_matrix[-1], 
+                                                     num_rows)
+        # Make transpose to get lists of table names
+        # to print on one line:
         
+        print_matrix = []
+        print("Missing tables: \n")
+        for i in range(num_rows):
+            print_row = []
+            for j in range(num_cols):
+                print_row.append(cols_matrix[j][i])
+            print_matrix.append(print_row)
+
+        # Build print strings in nicely arranged column:
+        for print_row in print_matrix:
+            tabular_print_str = ''
+            for table_name in print_row:
+                tabular_print_str += f"{table_name:<23}"
+            # Print one line:
+            print(tabular_print_str)
+         
+        return True    
+# ----------------------- Utilities ---------------
+
+    #-------------------------
+    # fill_list_with_spaces 
+    #--------------
+
+    def fill_list_with_spaces(self, the_list, desired_width):
+        if len(the_list) >= desired_width:
+            return the_list
+        # Have a short list.
+        new_list = the_list.copy()
+        # Make sure we are working with strings:
+        new_list = [str(el) for el in new_list]
+        for _i in range(desired_width - len(the_list)):
+            new_list.append(' ')
+        return new_list
+
+    #-------------------------
+    # list_chopper 
+    #--------------
+    
+    def list_chopper(self, list_to_chop, chop_size):
+        '''
+        Iterator that returns one list of chop_size
+        elements of list_to_chop at a time. 
         
-        # Ensure that all the handy SQL functions are available.
-        funcs_file = os.path.join(self.queries_dir, 'mysqlProcAndFuncBodies.sql')
-        (errors, _warns) = self.db.execute('SOURCE %s' % funcs_file)
-        if errors is not None:
-            self.log_warn("Could not load MySQL funcs/procedures: %s" % str(errors))
+        @param list_to_chop: list whose elements are to be delivered
+            in chop_size chunks
+        @type list_to_chop: [<any>]
+        '''
+        for i in range(0, len(list_to_chop), chop_size):
+            yield list_to_chop[i:i + chop_size]        
+        
+
+
+# ----------------------- Main -------------
+        
+if __name__ == '__main__':
+    LoadHistoryLister() 
+    #LoadHistoryLister(unittests=True) 
         
