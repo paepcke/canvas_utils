@@ -64,6 +64,10 @@ class ConfigInfo(object):
         return self._canvas_db_aux
     
     @property
+    def raw_data_db(self):
+        return self._raw_data_db
+    
+    @property
     def canvas_pwd_file(self):
         return self._canvas_pwd_file
 
@@ -110,6 +114,11 @@ class ConfigInfo(object):
             self._canvas_db_aux = config_parser['DATABASE']['canvas_auxiliary_db_name']
         except KeyError:
             raise ConfigurationError(f"Cannot read DATABASE:canvas_auxiliary_db_name from {setup_file_name}")  
+
+        try:
+            self._raw_data_db = config_parser['DATABASE']['raw_data_db']
+        except KeyError:
+            raise ConfigurationError(f"Cannot read DATABASE:raw_data_db from {setup_file_name}")  
 
         try:
             self._default_user = config_parser['DATABASE']['default_user']
