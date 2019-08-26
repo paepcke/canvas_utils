@@ -185,6 +185,8 @@ class CanvasPrep(object):
 
         self.utils.setup_logging(logging_level)
         self.log_info = self.utils.log_info
+        self.log_warn = self.utils.log_warn
+        self.log_err  = self.utils.log_err
         
         # Create list of full paths to table
         # creation sql files:
