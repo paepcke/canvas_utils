@@ -490,6 +490,18 @@ class CanvasPrep(object):
                 tbls_to_do = [tbl_name for tbl_name in CanvasPrep.tables if tbl_name not in completed_tables]
                 raise DatabaseError(f"Could not create table {tbl_nm}: {str(errors)}. \n Still to do in order: {tbls_to_do}")
 
+            # At least in MySQL 5.7 the information_schema.table table
+            # is not updated right away. We have to close and reopen the
+            # db after each table creation. Else the table will not be
+            # registered as existing. None of the FLUSH options fixed
+            # this behavior:
+            
+            self.db.close()
+            self.db = self.utils.log_into_mysql(self.user,
+                                                self.pwd,
+                                                db=self.target_db,
+                                                host=self.host)
+
             completed_tables.append(tbl_nm)
             # Make entry in table_refresh_log table:
             self.log_table_creation(tbl_nm)
@@ -539,7 +551,7 @@ class CanvasPrep(object):
                             	 WHERE table_schema = '{curr_db_schema}'
                             	   AND table_name = '{tbl_nm}';
         ''')
-        num_rows = res.next()
+        num_rows = res.next)(
              
         # Make the entry:
         (err, _warn) = self.db.execute(f'''INSERT INTO {curr_db_schema}.{load_log_tbl_nm} (tbl_name, num_rows)
