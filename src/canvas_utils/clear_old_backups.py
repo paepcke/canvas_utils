@@ -267,6 +267,7 @@ if __name__ == '__main__':
     parser.add_argument('-n', '--num_to_keep',
                         help=f'Number of backup tables to keep for each table. Default is ' +
                             f'{BackupRemover.default_num_backups_to_keep}',
+                        type=int,
                         default=BackupRemover.default_num_backups_to_keep)
     parser.add_argument('-u', '--user',
                         help=f'user name for logging into the canvas database.\n' +
