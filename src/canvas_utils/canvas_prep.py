@@ -14,6 +14,8 @@ import os
 import pickle
 import pwd
 import re
+import shutil
+import subprocess
 import sys
 
 from canvas_utils_exceptions import DatabaseError
@@ -136,6 +138,9 @@ class CanvasPrep(object):
         # Read any configs from the config file, if it exists:
         config_info = ConfigInfo()
 
+        # The db where the raw Canvas exports reside:
+        self.raw_data_db = config_info.raw_data_db
+
         if not unittests:
             CanvasPrep.default_host  = config_info.default_host
             CanvasPrep.canvas_db_aux = config_info.canvas_db_aux
@@ -163,7 +168,7 @@ class CanvasPrep(object):
         self.pwd = pwd 
         
         if target_db is None:
-            target_db = self.config_info.canvas_db_aux
+            target_db = config_info.canvas_db_aux
         else:
             target_db = target_db
             
@@ -200,12 +205,11 @@ class CanvasPrep(object):
         
         self.log_info('Connecting to db %s@%s.%s...' %\
                       (user, host, CanvasPrep.canvas_db_aux))
-                      
+        
         self.db = self.utils.log_into_mysql(user, 
                                             self.pwd, 
                                             db=target_db,
                                             host=host)
-        
         self.log_info('Done connecting to db.')
         
         # Used to have tables whose .sql was not self-contained;
@@ -445,6 +449,22 @@ class CanvasPrep(object):
             # Simple case: get query as string:
             with open(tbl_file_path, 'r') as fd:
                 query = fd.read().strip()
+            
+            # Default aux table db is hard coded into the sql files
+            # in the Queries dict. At first we used placeholders in
+            # the sql files for the aux and canvas raw data tables.
+            # Since these .sql files are user customizable, placeholders
+            # were too complex. Therefore the hardcoding:
+            #
+            #    Table aux destination db: canvasdata_aux
+            #    Raw canvas export tables: canvasdata_prd
+            #
+            # We now replace these hardcoded quantities with what was
+            # set in setup.cfg (or setupSample.cfg if no setup.cfg was
+            # created during installation):
+            
+            query = query.replace('canvasdata_aux', self.target_db)
+            query = query.replace('canvasdata_prd', self.raw_data_db)
                 
             # The following replacements should be done using 
             # the newer finalize_table module.
@@ -468,7 +488,7 @@ class CanvasPrep(object):
                 # Include in error msg the tables that are not
                 # yet done, so user can recover more easily:
                 tbls_to_do = [tbl_name for tbl_name in CanvasPrep.tables if tbl_name not in completed_tables]
-                raise DatabaseError(f"Could not create table tbl_nm: str(errors). \n Still to do in order: {tbls_to_do}")
+                raise DatabaseError(f"Could not create table {tbl_nm}: {str(errors)}. \n Still to do in order: {tbls_to_do}")
 
             completed_tables.append(tbl_nm)
             # Make entry in table_refresh_log table:
@@ -550,6 +570,9 @@ class CanvasPrep(object):
         (xml_file_root, _ext) = os.path.splitext(ec_xml_path)
         csv_outfile = xml_file_root + '.csv'
         puller.ec_xml_to_csv(ec_xml_path, csv_outfile)
+        # Copy the .csv file to /tmp so that the Queries/ExploreCourses.sql
+        # can find it to import:
+        shutil.copy(csv_outfile, '/tmp')
         
     #-------------------------
     # handle_complicated_case 
@@ -566,7 +589,6 @@ class CanvasPrep(object):
     def create_quiz_dim(self):
         pass
           
-            
     #-------------------------
     # prep_db 
     #--------------
@@ -575,13 +597,9 @@ class CanvasPrep(object):
         '''
         Set selected MySQL session configurations.
         '''
+    
+        # Check that target db exists; else create it:
         
-        # All SQL is written assuming MySQL's current db is
-        # the one where the new tables will be created:
-        (err, _warn) = self.db.execute('USE %s' % CanvasPrep.canvas_db_aux)
-        if err is not None:
-            raise DatabaseError(f"Cannot switch to db {CanvasPrep.canvas_db_aux}: {repr(err)}")
-
         
         # MySQL 8 started to complain when functions do not 
         # specify DETERMINISTIC or NO_SQL, or one of several other
@@ -601,11 +619,33 @@ class CanvasPrep(object):
         
         
         # Ensure that all the handy SQL functions are available.
-        funcs_file = os.path.join(self.queries_dir, 'mysqlProcAndFuncBodies.sql')
-        (errors, _warns) = self.db.execute('SOURCE %s' % funcs_file)
-        if errors is not None:
-            self.log_warn("Could not load MySQL funcs/procedures: %s" % str(errors))
+        # They are in file canvasMysqlProcs.sql. The file is imported
+        # into a db (a.k.a. MySQL schema) via "SOURCE <path-to-sql-file>" 
+        # We cannot use the usual self.db.execute(), b/c SOURCE is a
+        # MySQL shell directive, not an SQL command. So must use the
+        # call_mysql.sh script for the call
         
+        # Location of .sql file, and command string:
+        funcs_file = os.path.join(self.curr_dir, 'canvasMysqlProcs.sql')
+        source_cmd = f'SOURCE {funcs_file}'
+        
+        # Location of call_mysql.sh script:
+        shell_script = os.path.join(os.path.dirname(__file__), 'call_mysql.sh')
+        
+        # Get full path to mysql command:
+        mysql_path = self.utils.get_mysql_path()
+        src_load_stmt_arr =[shell_script,
+                            self.host,
+                            self.user, 
+                            self.pwd, 
+                            self.target_db,
+                            mysql_path,
+                            '/dev/null',
+                            source_cmd
+                            ] 
+        _completed_process = subprocess.run(src_load_stmt_arr, 
+                                            #capture_output=True, # Only for debugging 
+                                            shell=False)
 
     #-------------------------
     # save_table_done_dict 
@@ -837,17 +877,20 @@ if __name__ == '__main__':
                         default=False);
                         
     parser.add_argument('-u', '--user',
-                        help='user name for logging into the canvas database. Default: {}'.format(CanvasPrep.default_user),
-                        default=CanvasPrep.default_user)
+                        help=f'user name for logging into the canvas database.\n' +
+                             f'Default as per setup.cfg. If no setup.cfg: {CanvasPrep.default_user}',
+                        default=None)
                         
     parser.add_argument('-p', '--password',
-                        help='password for logging into the canvas database. Default: content of $HOME/.ssh/canvas_db',
+                        help='password for logging into the canvas database.\n' +
+                             'Default: content of $HOME/.ssh/canvas_db',
                         action='store_true',
                         default=None)
                         
     parser.add_argument('-o', '--host',
-                        help='host name or ip of database. Default: Canvas production database.',
-                        default=CanvasPrep.default_host)
+                        help=f'host name or ip of database. Default: as per setup.cfg, else\n' +
+                             f'if no setup.cfg: {CanvasPrep.default_host}',
+                        default=None)
                         #default='canvasdata-prd-db1.ci6ilhrc8rxe.us-west-1.rds.amazonaws.com')
                         #default='canvasdata-prd-db1.cupga556ks1y.us-west-1.rds.amazonaws.com')
                         
@@ -858,8 +901,9 @@ if __name__ == '__main__':
                         )
 
     parser.add_argument('-d', '--database',
-                        help='MySQL/Aurora database (schema) into which new tables are to be placed. Default: canvasdata_aux',
-                        default='canvasdata_aux')
+                        help=f'MySQL/Aurora database (schema) into which new tables are to be placed.\n' +
+                             f'Default: as per setup.cfg, else {CanvasPrep.canvas_db_aux}',
+                        default=None)
     
     parser.add_argument('-q', '--quiet',
                         help='if present, only error conditions are shown on screen. Default: False',
