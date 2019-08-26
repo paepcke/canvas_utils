@@ -13,18 +13,24 @@ class QueryConverter(object):
     '''
     Replaces the hardcoded names of the Canvas database that contains
     full exports, and the database name for the auxiliary tables
-    in the query files of the Queries subdirectory. See README.md for
-    why the names are hardcoded in those query files to be Stanford
-    specific. This utility is meant for localizing this package to
-    universities where these two databases are known by other names. 
+    in the query files of the Queries subdirectory. 
+
+    This script is needed only at installation time, and only if
+    the destination for aux tables are called something other than
+    canvasdata_aux, and/or the database with the raw Canvas imports
+    is named something other than canvasdata_prd.
+
+    See README.md for why the names are hardcoded in those query files
+    to be Stanford specific. This utility is meant for localizing this
+    package to universities where these two databases are known by
+    other names.
     
     On the command line the utility accepts replacements for the 
     canvasdata_prd (full exports db), the canvasdata_aux (destination 
     of auxiliary tables), and location of the course information directory.
     '''
-    aux_placeholder      = '<canvas_aux>'
-    prd_placeholder      = '<canvas_db>'
-    data_dir_placeholder = '<data_dir>'
+    aux_placeholder      = 'canvasdata_aux'
+    prd_placeholder      = 'canvasdata_prd'
     
     #-------------------------
     # Constructor 
@@ -125,7 +131,6 @@ class QueryConverter(object):
                     line = line.strip('\n')
                     line = line.replace(QueryConverter.aux_placeholder, self.aux_db)
                     line = line.replace(QueryConverter.prd_placeholder, self.prd_db)
-                    line = line.replace(QueryConverter.data_dir_placeholder, self.course_info_dir)
                     
                     fd_out.write(line + '\n')
                 
