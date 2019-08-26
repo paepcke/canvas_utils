@@ -21,6 +21,7 @@ A summary of the available commands. Only the first three are typically in gener
 - **refresh_history.py**: list auxiliary tables that have already been created, and the tables that are still missing.
 - **canvas_prep.py**: request that some, or all aux tables be built.
 - **copy_aux_tables.py**: export the aux tables to csv.
+- **refresh_history.py**: list the available auxiliary tables, and the still missing tables.
 - restore_tables.py: replace an aux table with the latest of its backups.
 - clear_old_backups.py: remove all but a specified number of backups. Called automatically.
 
@@ -112,13 +113,14 @@ To add an additional table, create a file in the `Queries` directory. Make the f
 Similarly, the existing files may be modified to taste.
 
 ### Implementation Note
-The table .sql files naturally contain table creation statements. Those statements reference the database (a.k.a. MySQL schema) where the `Auxiliaries` are to be constructed. They also reference the database where the full Canvas exports reside. These names are hard coded into the .sql files.
+The table .sql files contain table creation statements. Those statements reference the database (a.k.a. MySQL schema) where the `Auxiliaries` are to be constructed. They also reference the database where the full Canvas exports reside. These names are hard coded into the .sql files.
 
-This decision means that customizations need to replace those hardcoded names with those compatible at the installation site. In an effort to avoid this installation inconvenience, the initial implementation used placeholder names in the .sql files. Those placeholders were automatically replaced by the `canvas_prep.py` code.
+The names are automatically replaced in memory at runtime if `setup.cfg` alters these names via the
 
-User feedback directed the change to hard coding the names. The addition of new tables, or users modifying the existing queries is a more frequent event than globally changing the database names in the sql statements once during the installation.
+- canvas_auxiliary_db_name and
+- raw_data_db
 
-However, if the database with Canvas full exports is not called canvasdata_prd, or if the desired destination database of the auxiliary tables is not to be called canvasdata_aux, then the aux table creation queries can be changed wholesale using the included utility `convert_queries.py`. The program accepts replacement database names, and replaces the hardcoded database names in the queries.
+entries. One can use the script convert_queries.py for modifying the .sql files in the `Queries` directory to reflect the local names, instead of the hardcoded `canvasdata_aux` and `canvasdata_prd`. But the .sql files will be overwritten with updates. Best practice: use those two names. Second-best practice: indicate the different names in `setup.cfg`, and rely on `canvas_prep.py` to do the substitutions on the fly.
 
 ## Localization
 
