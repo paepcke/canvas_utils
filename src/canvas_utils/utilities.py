@@ -8,6 +8,8 @@ import getpass
 import logging
 import os
 import re
+import shutil
+import socket
 
 from pymysql_utils.pymysql_utils import MySQLDB
 
@@ -301,8 +303,8 @@ class Utilities(object):
         except ValueError as e:
             # Does the db not exist yet?
             if str(e).find("OperationalError(1049,") > -1:
-                # Log in without specifying a db to 'use':
-                db =  MySQLDB(user=user, passwd=pwd, db=db, host=host)
+                # Log in, specifying an always present db to 'use':
+                db =  MySQLDB(user=user, passwd=pwd, db='information_schema', host=host)
                 # Create the db:
                 db.execute('CREATE DATABASE %s;' % self.config_info.canvas_db_aux)
             else:
@@ -381,6 +383,53 @@ class Utilities(object):
                                            reverse=True,
                                            key=lambda tbl_name: self.backup_table_name_components(tbl_name)[2])
         return backup_table_names_sorted
+
+    #-------------------------
+    # get_mysql_path 
+    #--------------
+
+    def get_mysql_path(self):
+        '''
+        Only relevant if running in Eclipse for debugging. 
+        In Eclipse the shell PATH is not available. So 
+        subprocess() won't find mysql, even with shell==True.
+        
+        So: if we are not in Eclipse, we find the mysql path
+        with a simple 'which'. Else we guess.
+        
+        @return: Location of mysql program executable
+        @rtype: str
+        @raise RuntimeError: if executable is not found.
+        '''
+
+        # Eclipse puts extra info into the env:
+        eclipse_indicator = os.getenv('XPC_SERVICE_NAME')
+        
+        # If the indicator is absent, or it doesn't include
+        # the eclipse info, then we are not in Eclipse; the usual
+        # case, of course:
+        
+        if eclipse_indicator is None or \
+           eclipse_indicator == '0' or \
+           eclipse_indicator.find('eclipse') == -1:
+            # Not running in Eclipse; use reliable method to find mysql:
+            mysql_loc = shutil.which('mysql')
+            if mysql_loc is None:
+                raise RuntimeError("MySQL client not found on this machine (%s)" % socket.gethostname())
+        else:
+            # We are in Eclipse:
+            possible_paths = ['/usr/local/bin/mysql',
+                              '/usr/local/mysql/bin/mysql',
+                              '/usr/bin/mysql',
+                              '/bin/mysql']
+            for path in possible_paths:
+                if os.path.exists(path):
+                    mysql_loc = path
+                    break
+            if mysql_loc is None:
+                raise RuntimeError("MySQL client not found on this machine (%s)" % socket.gethostname())
+        return mysql_loc
+    
 
         
     # ------------------------ Logging Related Utilities -------------        
