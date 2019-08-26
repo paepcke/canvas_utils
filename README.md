@@ -23,7 +23,7 @@ A summary of the available commands. Only the first three are typically in gener
 - **copy_aux_tables.py**: export the aux tables to csv.
 - **refresh_history.py**: list the available auxiliary tables, and the still missing tables.
 - restore_tables.py: replace an aux table with the latest of its backups.
-- clear_old_backups.py: remove all but a specified number of backups. Called automatically.
+- clear_old_backups.py: remove all but a specified number of backups. Called automatically. But if errors interrupt runs, this script may be called with the number of maximum backup tables as command line parameter.
 
 
 Example for creating the tables in `Auxiliaries`:
@@ -70,7 +70,7 @@ to install the needed Python packages.
 Check file `setupSample.cfg` in the root directory. If any changes are needed, copy the file to `setup.cfg`, and modify options there. Note the following entries:
 
 - default_user--ensure that this entry's value is a known user in you MySQL installation.
-- canvas_auxiliary_db_name--create this database (a.k.a. MySQL schema). Grant at least CREATE and SELECT on this database to default_user.
+- canvas_auxiliary_db_name--create this database (a.k.a. MySQL schema). Grant at least CREATE, DROP, INSERT, SELECT on this database to default_user.
 - raw_data_db--ensure this is where your Canvas raw downloads reside. Grant at least SELECT on this database for default_user.
 - canvas_pwd_file--[see Password section](#passwords)
 
