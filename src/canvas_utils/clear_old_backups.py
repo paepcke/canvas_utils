@@ -92,7 +92,7 @@ class BackupRemover(object):
         self.target_db = target_db
         
         if num_to_keep is None:
-            self.num_to_keep = BackupRemover.default_num_backups_to_keep,
+            self.num_to_keep = BackupRemover.default_num_backups_to_keep
         else:
             self.num_to_keep = num_to_keep
             
