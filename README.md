@@ -1,23 +1,29 @@
-#<p align="center">Canvas Analysis Data Extraction</p>
+# <p align="center">Canvas Analysis Data Extraction</p>
 
 
-Utilities for mining Canvas data. Creates a set of 'auxiliary' tables from exports of Canvas data. The generated tables pull from the exports data that are likely to be useful for analysis. New auxiliary tables can easily be added. The package can perform the following functions: 
+Utilities for mining Canvas data. Creates a set of 'auxiliary' tables from exports of Canvas data. The generated tables data likely to be useful for analysis. New auxiliary tables can easily be added. The package can perform the following functions: 
 
 - Create the auxiliary tables
 - Backup/restore the auxiliary tables
-- Export the auxiliary tables' schemas as .sql files, and their contents
-  to .csv files in a specified directory
+- Export the auxiliary tables' schemas as .csv files
 
-In the following we call the MySQL database holding the new auxiliary tables `Auxiliaries.` The following functions are performed when the generation of the `Auxiliaries` tables is requested:
+In the following we call the MySQL database holding the new auxiliary tables `Auxiliaries.` The following functions are performed when the generation of the `Auxiliaries` tables is requested by running `canvas_prep.py`:
 
 - Backup the existing `Auxiliaries` tables
 - Create the tables in `Auxiliaries`
 - Ensure that only up to two `Auxiliaries` backups exist to avoid
   excessive disk usage.
 
-The program responsible for table creation is `canvas_prep.py`. It can be called with a `-h` or `--help` option.
+The program responsible for table creation is `canvas_prep.py`. Like all other commands, `canvas_prep.py` can be called with a `-h` or `--help` option.
 
-The backup copies are managed by `restore_tables.py`, which also answers to the `-h/--help` switch.
+A summary of the available commands. Only the first three are typically in general use:
+
+- **refresh_history.py**: list auxiliary tables that have already been created, and the tables that are still missing.
+- **canvas_prep.py**: request that some, or all aux tables be built.
+- **copy_aux_tables.py**: export the aux tables to csv.
+- restore_tables.py: replace an aux table with the latest of its backups.
+- clear_old_backups.py: remove all but a specified number of backups. Called automatically.
+
 
 Example for creating the tables in `Auxiliaries`:
 ```
@@ -25,19 +31,20 @@ Example for creating the tables in `Auxiliaries`:
 src/canva_utils/canvas_prep.py
 
 # Create only the CourseEnrollments and AssignmentSubmissions tables:
-src/canva_utils/canvas_prep.py --table CourseEnrollments --table AssignmentSubmissions
+src/canva_utils/canvas_prep.py --table CourseEnrollments AssignmentSubmissions
 ```
 
 Example for exporting the tables in `Auxiliaries` to .csv with
 contents, and .sql for the schema:
 ```
 # Generate one .csv file and one .sql file for every auxiliary table
-# in the default directory /tmp:
+# in the default directory /tmp. The .sql file holds the table's
+# sql schema:
 src/canvas_utils/copy_aux_tables.py
 
 # Export only the CourseEnrollments and AssignmentSubmissions tables
 # into /my/own/directory:
-src/canvas_utils/copy_aux_tables.py --table CourseEnrollments --table AssignmentSubmissions --destdir /my/own/directory
+src/canvas_utils/copy_aux_tables.py --table CourseEnrollments AssignmentSubmissions --destdir /my/own/directory
 ```
 
 The schema files contain SQL `CREATE TABLE` statements. The .csv files will contain a header line with with column names, followed by the data. All values will be double-quoted.
@@ -92,7 +99,7 @@ Customization options comprise:
 
 In addition, the three commands `canvas_prep.py`, `copy_aux_tables.py`, `restore_tables.py` provide a number of command line options. Use the --help switch for details.
 
-The file `setup_Sample.cfg` in the project root directory enables settings for a number of defaults, including login names, database names, and host names.
+The file `setupSample.cfg` in the project root directory enables settings for a number of defaults, including login names, database names, and host names.
 
 To make changes in this file, copy it to `setup.cfg` in the root directory. Then follow instructions in the file. This modified copy will be preserved during code updates.
 
@@ -171,7 +178,7 @@ Option 2: Only the Courses table depends on this information. One could modify t
 ## Passwords
  No passwords are contained in the code. However, each module that needs a MySQL password knows to look for the file `$HOME/.ssh/canvas_pwd`. Placing a password into this file will cause smooth operation.
 
-As is usual for this directory, make sure that both $HOME/.ssh, and the password file are only readable by owner.
+As is usual for this directory, make sure that both $HOME/.ssh, and the password file are only readable by owner. The filename may be changed in `setup.cfg`.
  
 All commands also support the `-p` and `-u` options that prompt for the password at runtime. 
 
