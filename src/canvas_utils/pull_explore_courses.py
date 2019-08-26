@@ -21,7 +21,7 @@ class ECPuller(object):
     Places result in a specified file. 
     
     Instances can be queried for number of bytes pulled right
-    after instanciation: inst.bytes_pulled
+    after instantiation: inst.bytes_pulled
     '''
     # Root of the request URL:
     ec_url      = "https://explorecourses.stanford.edu/search"
@@ -48,7 +48,7 @@ class ECPuller(object):
         '''
         Do sanity checks, then pull the xml into outfile
         
-        Outfile may be relative the the directory of this script,
+        Outfile may be relative to the directory of this script,
         or absolute. If directory of requested outfile location does
         not exist, it is created. 
         
