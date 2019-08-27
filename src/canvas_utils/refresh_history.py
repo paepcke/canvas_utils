@@ -4,6 +4,7 @@ Created on Aug 24, 2019
 
 @author: paepcke
 '''
+from datetime import timezone
 import math
 import sys
 
@@ -97,7 +98,7 @@ class LoadHistoryLister(object):
         load_time_header = 'Last Refreshed'
         num_rows_header  = 'Num Rows'
         # Print the header:
-        print(f'{tbl_nm_header:>30} {load_time_header:^20} {num_rows_header:^5}')
+        print(f'{tbl_nm_header:>30} {load_time_header:^25} {num_rows_header:^5}')
         
         # For each result dict, pull out the table name,
         # time refreshed, and number of rows. Assign them
@@ -105,12 +106,20 @@ class LoadHistoryLister(object):
         
         for tbl_entry_dict in sorted_tbl_dicts:
             tbl_nm       = tbl_entry_dict['tbl_name']
-            time_loaded  = str(tbl_entry_dict['time_refreshed']) 
-            num_rows     = tbl_entry_dict['num_rows'] 
+            num_rows     = tbl_entry_dict['num_rows']
+            
+            # Get a UTC datetime obj (b/c we initialize
+            # each MySQL session to be UTC):
+            utc_load_datetime = tbl_entry_dict['time_refreshed']
+            
+            # Tell this 'unaware' datetime obj that it'
+            tz_aware_load_datetime = utc_load_datetime.replace(tzinfo=timezone.utc)
+            localized_datetime = tz_aware_load_datetime.astimezone(tz=None)
+            load_time_str = localized_datetime.strftime("%Y-%m-%d %H:%M:%S %Z")
 
             # The ':>30' is "right-justfy; allow 30 chars.
             # The '^20'  is "center-justfy; allow 20 chars.
-            print(f"{tbl_nm:>30}   {time_loaded:^20} {num_rows:^5}")
+            print(f"{tbl_nm:>30}   {load_time_str:^25} {num_rows:^5}")
           
         return True
       
