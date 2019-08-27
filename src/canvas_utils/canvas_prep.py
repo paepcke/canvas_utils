@@ -18,7 +18,7 @@ import shutil
 import subprocess
 import sys
 
-from canvas_utils_exceptions import DatabaseError
+from canvas_utils_exceptions import DatabaseError, ExploreCoursesError
 from clear_old_backups import BackupRemover
 from config_info import ConfigInfo
 from pull_explore_courses import ECPuller
@@ -261,7 +261,10 @@ class CanvasPrep(object):
         if self.dryrun:
             print("Would fetch fresh copy of explore-courses.")
         else:
-            self.pull_explore_courses()
+            try:
+                self.pull_explore_courses()
+            except ExploreCoursesError as e:
+                self.log_err(e.message)
             
         # Create the other tables that are needed.
         try:
@@ -466,17 +469,6 @@ class CanvasPrep(object):
             query = query.replace('canvasdata_aux', self.target_db)
             query = query.replace('canvasdata_prd', self.raw_data_db)
                 
-            # The following replacements should be done using 
-            # the newer finalize_table module.
-            # Replace the placeholder <canvas_db> with the
-            # db name of the Canvas product db:
-            # [Abandoned using marked up queries as too complex for maintenance]
-            
-            # query = query.replace('<canvas_db>', CanvasPrep.canvas_db_nm)
-            # query = query.replace('<canvas_aux>', CanvasPrep.canvas_db_aux)
-            # query = query.replace('<data_dir>', os.path.join(self.curr_dir, 'Data'))
-            
-            
             if self.dryrun:
                 print(f"Would create table {tbl_nm}.")
                 completed_tables.append(tbl_nm)
@@ -565,6 +557,15 @@ class CanvasPrep(object):
     #--------------
         
     def pull_explore_courses(self):
+        '''
+        Attempts to retrieve a new XML file from
+        the ExploreCourses site. If success, converts to
+        .csv, and copies that file both to /tmp/ and to 
+        the Data subdirectory of this file.
+        
+        @raise ExploreCoursesError: if site does not respond,
+            or XML is not properly formatted.
+        '''
         
         # Need absolute path to XML file:
         ec_xml_path = os.path.join(self.curr_dir, CanvasPrep.ec_xml_file)
@@ -576,15 +577,66 @@ class CanvasPrep(object):
                           )
         # Do the retrieval of a new .xml file from
         # the HTTP server:
-        puller.pull_ec()
+        num_bytes_from_web_site = puller.pull_ec()
                 
         # Convert the .xml to .csv:
         (xml_file_root, _ext) = os.path.splitext(ec_xml_path)
         csv_outfile = xml_file_root + '.csv'
-        puller.ec_xml_to_csv(ec_xml_path, csv_outfile)
+        
+        # If the Web site delivered, then convert
+        # the XML to csv, and copy to /tmp for others to find:
+        
+        if num_bytes_from_web_site > 0:
+            try:
+                puller.ec_xml_to_csv(ec_xml_path, csv_outfile)
+            except ExploreCoursesError as e:
+                if self.try_use_old_ec_file():
+                    raise ExploreCoursesError("Could not retrieve new ExploreCourses info; using old info.\n" +
+                                              f"The problem: {e.message}")
+                else:
+                    raise ExploreCoursesError("Could not retrieve new ExploreCourses info; the table will be empty\n" +
+                                              f"The problem: {e.message}")
+        else:
+            # See whether a previous .csv file is present, and
+            # use that with a warning:
+            if self.try_use_old_ec_file():
+                self.utils.log_warn("EC site did delivered nothing. Using old ExploreCourses info!")
+            else:
+                # Not much we can do:
+                raise ExploreCoursesError("EC site delivered nothing. ExploreCourses will be empty.")
+                return
         # Copy the .csv file to /tmp so that the Queries/ExploreCourses.sql
         # can find it to import:
         shutil.copy(csv_outfile, '/tmp')
+
+    #-------------------------
+    # try_use_old_ec_file 
+    #--------------
+    
+    def try_use_old_ec_file(self):
+        '''
+        See whether an old explore_courses.csv file
+        exists. If so copy it to /tmp/ Return True
+        if this attempt successful, else return False.
+        
+        @return: whether an explore_courses.csv file was
+            found, and copied to /tmp
+        @rtype: bool
+        '''
+
+        # Find path to earlier EC .csv file, if one exists: 
+        ec_xml_path = os.path.join(self.curr_dir, CanvasPrep.ec_xml_file)
+
+        (xml_file_root, _ext) = os.path.splitext(ec_xml_path)
+        csv_outfile = xml_file_root + '.csv'
+        
+        # See whether a previous .csv file is present, and
+        # use that with a warning:
+        if os.path.exists(csv_outfile) and os.path.getsize(csv_outfile) > 0:
+            shutil.copy(csv_outfile, '/tmp')
+            return True
+        else:
+            return False
         
     #-------------------------
     # handle_complicated_case 
@@ -610,16 +662,13 @@ class CanvasPrep(object):
         Set selected MySQL session configurations.
         '''
     
-        # Check that target db exists; else create it:
-        
-        
         # MySQL 8 started to complain when functions do not 
         # specify DETERMINISTIC or NO_SQL, or one of several other
         # function characteristics. Avoid that complaint:
         
-        (err, _warn) = self.db.execute("SET GLOBAL log_bin_trust_function_creators = 1;")
-        if err is not None:
-            self.log_warn(f"Cannot set global log_bin_trus_function_creators: {repr(err)}")
+#         (err, _warn) = self.db.execute("SET GLOBAL log_bin_trust_function_creators = 1;")
+#         if err is not None:
+#             self.log_warn(f"Cannot set global log_bin_trus_function_creators: {repr(err)}")
         
         
         # At least for MySQL 8.x we need to allow zero dates,
@@ -711,13 +760,12 @@ class CanvasPrep(object):
         '''
         List tables that can be created to screen.
         '''
+        utils = Utilities()
         # Fill the tables array with all tables created
         # in the Queries dir:
-        CanvasPrep.create_table_name_array()
+        tables = Utilities.create_table_name_array()
         
-        print("Tables that can be created:")
-        for table in CanvasPrep.tables:
-            print(f"{table},")
+        utils.print_columns(tables, '\nTables that can be created:')
     
     #-------------------------
     # get_queries_dir 
