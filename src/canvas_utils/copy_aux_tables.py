@@ -11,8 +11,6 @@ import csv
 import logging
 from os import getenv
 import os
-import shutil
-import socket
 from subprocess import PIPE
 import subprocess
 import sys
@@ -153,7 +151,6 @@ class AuxTableCopier(object):
             # below fails, ensure that self.db isn't
             # None in the 'finally' clause:
             
-            self.db = None
             self.connect_to_src_db(self.user, 
                                        self.host, 
                                        self.pwd, 
@@ -183,7 +180,7 @@ class AuxTableCopier(object):
         # initialize a dict of tables alreay done. The dict
         # is a persistent object:
         
-        self.completed_tables = self.get_existing_tables_in_dir(self.db, set(tables))
+        self.completed_tables = self.get_existing_tables_in_dir(set(tables))
 
     #-------------------------
     # PROPERTY: schema 
