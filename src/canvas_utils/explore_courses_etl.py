@@ -11,6 +11,8 @@ import os
 import sys
 
 from lxml import etree
+import lxml
+from canvas_utils_exceptions import ExploreCoursesError
 
 
 class ECXMLExtractor(object):
@@ -52,9 +54,50 @@ class ECXMLExtractor(object):
         @type xml_file: {str | file-like}
         '''
         sys.stderr.write('Building xml tree in memory...\n')
-        self.root = etree.parse(xml_file)
+        try:
+            self.root = etree.parse(xml_file)
+        except lxml.etree.XMLSyntaxError as e:
+            # Could not parse the file as XML. Is
+            # it an HTML formatted message from the
+            # site, such as 'Site unavailable?'
+            site_msg = self.try_parse_html_msg(xml_file)
+            if site_msg is not None:
+                raise ExploreCoursesError(f"Problem with the ExploreCourses site: {site_msg}\n")
+            else:
+                raise ExploreCoursesError(f"Failed to parse ExploreCourses XML file: {repr(e)}\n")
+                return
+            
         sys.stderr.write('Done building xml tree in memory.\n')
         self.print_explore_courses_table(self.root)
+
+    #-------------------------
+    # try_parse_html_msg 
+    #--------------
+    
+    def try_parse_html_msg(self, file_path):
+        '''
+        Sometimes the ExploreCourses service is down, and
+        responds with an HTML msg instead of XML content.
+        Try whether this is true by parsing the 'xml' file
+        as HTML, and returning the HEAD/TITLE. An example
+        title is: '503 Service Unavailable'.
+        Return None if no such message can be found, else
+        the string.
+        
+        @param file_path: full path to file
+        @type file_path: str
+        @return: message string, or None
+        @rtype {None | str}
+        '''
+        try:
+            root = etree.parse(file_path, etree.HTMLParser())
+            msg_arr = root.xpath("/html/head/title/text()")
+            if len(msg_arr) > 0:
+                return msg_arr[0]
+            return None 
+        except Exception as e:
+            sys.stderr.write(f"Attempted parsing site message, but: {repr(e)}\n")
+            return None
         
     #--------------------------
     # print_explore_courses_table 

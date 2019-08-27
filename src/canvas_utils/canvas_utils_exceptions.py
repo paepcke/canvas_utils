@@ -71,6 +71,24 @@ class DatabaseError(Exception):
     def message(self):
         return f"{self._message_fragment}"
     
+#-------------------------
+# ExploreCoursesError
+#--------------
+    
+class ExploreCoursesError(Exception):
+    '''
+    Error during pull from ExploreCourses site
+    One property: message
+    '''
+    def __init__(self, message):
+        self._message_fragment = message
+        super().__init__(self.message)
+        
+    
+    @property
+    def message(self):
+        return f"{self._message_fragment}"
+    
     
 #-------------------------
 # InternalTableError 

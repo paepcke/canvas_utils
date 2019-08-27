@@ -11,6 +11,7 @@ import sys
 
 import requests
 from explore_courses_etl import ECXMLExtractor
+from canvas_utils_exceptions import ExploreCoursesError
 
 
 class ECPuller(object):
@@ -132,7 +133,11 @@ class ECPuller(object):
             kbytes_pulled = 0
             next_reporting_point = log_freq
         
-        req = requests.get(ECPuller.ec_url, ECPuller.ec_req_dict)
+        try:
+            # Timeout in seconds:
+            req = requests.get(ECPuller.ec_url, ECPuller.ec_req_dict, timeout=10)
+        except requests.exceptions.Timeout as _e:
+            raise ExploreCoursesError("Explore courses Web site did not respond. ExploreCourses table will be empty")
         with open(outfile, 'wb') as fd:
             for chunk in req.iter_content(chunk_size=128):
                 fd.write(chunk)
@@ -194,7 +199,13 @@ class ECPuller(object):
             if csv_outfile is not None:
                 with open(csv_outfile, 'w') as file_out_fd:
                     with stdout_redirected(file_out_fd):
-                        ECXMLExtractor(fd)
+                        # ECXMLExtractor writes to stdout,
+                        # so redirect that output to the destination
+                        # csv file:
+                        try:
+                            ECXMLExtractor(fd)
+                        except ExploreCoursesError as e:
+                            raise ExploreCoursesError(f"Error during access to ExploreCourses Web site: {e.message}")
             else:
                 ECXMLExtractor(fd)
     
