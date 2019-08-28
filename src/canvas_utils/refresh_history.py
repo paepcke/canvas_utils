@@ -4,8 +4,10 @@ Created on Aug 24, 2019
 
 @author: paepcke
 '''
+from _collections import OrderedDict
+import argparse
 from datetime import timezone
-import math
+import os
 import sys
 
 from pymysql_utils.pymysql_utils import Cursors
@@ -27,7 +29,7 @@ class LoadHistoryLister(object):
     # Constructor 
     #--------------
 
-    def __init__(self, unittests=False):
+    def __init__(self, latest_only=False, unittests=False):
         '''
         Constructor
         '''
@@ -50,6 +52,8 @@ class LoadHistoryLister(object):
                                                     host=config_info.test_default_host,
                                                     cursor_class = Cursors.DICT
                                                     )
+            # Let unittests call methods on their own:
+            return
         else:
             self.db_obj = self.utils.log_into_mysql(config_info.default_user,
                                                     self.utils.get_db_pwd(config_info.default_host,
@@ -60,7 +64,7 @@ class LoadHistoryLister(object):
                                                     )
             
         try:
-            success = self.print_latest_refresh()
+            success = self.print_latest_refresh(latest_only)
             if success:
                 self.print_missing_tables()
             # self.backup_availability()
@@ -71,34 +75,62 @@ class LoadHistoryLister(object):
     # print_latest_refresh 
     #--------------
     
-    def print_latest_refresh(self):
+    def print_latest_refresh(self, 
+                             latest_only=False, 
+                             out_fd=sys.stdout, 
+                             load_log_content=None):
         '''
         Pretty print a list of aux tables that exist in 
         the database.
         
+        @param latest_only: if True, only the most recent refresh
+            event for each table will be shown.
+        @type latest_only: bool
+        @param out_fd: if provided, a file-like object to which
+            output is written. Default: stdout. Used by unittests,
+            but could also be used to write the report to a file.
+        @type out_fd: file-like
+        @param load_log_content: a list of dicts reflecting the content
+            of the LoadLog table. Only used by unittests!
+        @type load_log_content: [{}]
         @return: True for success, False for failure
         @rtype: bool
         '''
         
         try:
-            tbl_content = self.db_obj.query(f"SELECT * FROM {self.aux_db}.{self.load_table_name}")
+            # Only read content of LoadLog table if
+            # unittests did not pass in their own in
+            # the call:
+            # Result will be:
+            #  [{tbl_name : <str>, num_rows : <int>, time_refreshed : datetime},
+            #   {tbl_name : <str>, num_rows : <int>, time_refreshed : datetime},
+            #        ..
+            #  ]
+            if load_log_content is None:
+                load_log_content = self.db_obj.query(f"SELECT * FROM {self.aux_db}.{self.load_table_name}")
         except ValueError as e:
-            print(f"Cannot list tables: {repr(e)}")
+            out_fd.write(f"Cannot list tables: {repr(e)}\n")
             return False
             
         # Pull all row-dicts out from the query result:
-        tbl_dicts   = [tbl_dict for tbl_dict in tbl_content]
+        tbl_dicts   = [tbl_dict for tbl_dict in load_log_content]
         
         # Sort the dicts by table name:
         sorted_tbl_dicts = sorted(tbl_dicts, key=lambda one_dict: one_dict['tbl_name'])
         
-        print(f"\nAux tables in {self.aux_db}:\n")
+        out_fd.write(f"\nAux tables in {self.aux_db}:\n\n")
         
         tbl_nm_header    = 'Table Name'
         load_time_header = 'Last Refreshed'
         num_rows_header  = 'Num Rows'
         # Print the header:
-        print(f'{tbl_nm_header:>30} {load_time_header:^25} {num_rows_header:^5}')
+        out_fd.write(f'{tbl_nm_header:>30} {load_time_header:^25} {num_rows_header:^5}\n')
+
+        # If requested, only show the latest update
+        # for each table:
+        
+        if latest_only:
+            sorted_tbl_dicts = self.keep_latest_dict(sorted_tbl_dicts)
         
         # For each result dict, pull out the table name,
         # time refreshed, and number of rows. Assign them
@@ -119,9 +151,41 @@ class LoadHistoryLister(object):
 
             # The ':>30' is "right-justfy; allow 30 chars.
             # The '^20'  is "center-justfy; allow 20 chars.
-            print(f"{tbl_nm:>30}   {load_time_str:^25} {num_rows:^5}")
+            out_fd.write(f"{tbl_nm:>30}   {load_time_str:^25} {num_rows:^5}\n")
           
         return True
+      
+    #-------------------------
+    # keep_latest_dict
+    #--------------
+    
+    def keep_latest_dict(self, load_event_dicts):
+        '''
+        Given a list of dicts with table-name, load-date,
+        and row num keys, return a new list with only the
+        dicts that describe the most recent table refresh.
+        
+        @param load_event_dicts: array of dict describing table
+            refresh events.
+        @type load_event_dicts: [{}]
+        '''
+        # Dict {tbl_name : load_event_dict} to hold
+        # the most recent dict for the respective table.
+        # Use an ordered dict to not mess up order of
+        # passed-in dicts:
+         
+        latest_dicts = OrderedDict()
+        for load_event_dict in load_event_dicts:
+            tbl_nm = load_event_dict['tbl_name']
+            try:
+                if load_event_dict['time_refreshed'] > latest_dicts[tbl_nm]['time_refreshed']:
+                    latest_dicts[tbl_nm] = load_event_dict
+            except KeyError:
+                # First time we see an entry for this table:
+                latest_dicts[tbl_nm] = load_event_dict
+        
+        res = [newest_refresh_dict for newest_refresh_dict in latest_dicts.values()]
+        return res        
       
     #-------------------------
     # print_missing_tables 
@@ -147,104 +211,27 @@ class LoadHistoryLister(object):
         if len(missing_tables) == 0:
             print("No missing tables.")
             return True
-        
-        sorted_missing_tables = sorted(missing_tables)
-        
-        # Want to list in col_num columns, with alpha
-        # order going down columns. Ex. For tables 
-        # named 1,2,...,0, want to print:
-        #
-        #   1  5   9  13
-        #   2  6  10  14 
-        #   3  7  11  15
-        #   4  8  12  16
-        
-        # Number of needed rows; the ceiling is for
-        # the last row, which may not be all filled:
-        
-        num_rows = math.ceil(len(sorted_missing_tables) / num_cols)
 
-        # Get chunks of sorted table names 
-        # with chunk size being the number
-        # of rows we'll have. For 22 elements:
-        #
-        # cols_matrix = [[ 1, 2, 3, 4, 5, 6,],
-        #                [ 7, 8, 9,10,11,12,],
-        #                [13,14,15,16,17,18],
-        #                [19,20,21,22]
-        #               ]
-
-        rows_it      = self.list_chopper(sorted_missing_tables, num_rows)
-        cols_matrix  = [cols for cols in rows_it]
-
-        # Ensure the last row is either full, or
-        # filled with a space string in each empty
-        # column:
-        cols_matrix[-1] = self.fill_list_with_spaces(cols_matrix[-1], 
-                                                     num_rows)
-        # Make transpose to get lists of table names
-        # to print on one line:
-        
-        print_matrix = []
-        print("Missing tables: \n")
-        for i in range(num_rows):
-            print_row = []
-            for j in range(num_cols):
-                print_row.append(cols_matrix[j][i])
-            print_matrix.append(print_row)
-
-        # Build print strings in nicely arranged column:
-        for print_row in print_matrix:
-            tabular_print_str = ''
-            for table_name in print_row:
-                tabular_print_str += f"{table_name:<23}"
-            # Print one line:
-            print(tabular_print_str)
+        self.utils.print_columns(missing_tables, 'Missing Tables:', num_cols=num_cols, alpha=True)        
          
         return True    
 # ----------------------- Utilities ---------------
-
-    #-------------------------
-    # fill_list_with_spaces 
-    #--------------
-
-    def fill_list_with_spaces(self, the_list, desired_width):
-        if len(the_list) >= desired_width:
-            return the_list
-        # Have a short list.
-        new_list = the_list.copy()
-        # Make sure we are working with strings:
-        new_list = [str(el) for el in new_list]
-        for _i in range(desired_width - len(the_list)):
-            new_list.append(' ')
-        return new_list
-
-    #-------------------------
-    # list_chopper 
-    #--------------
-    
-    def list_chopper(self, list_to_chop, chop_size):
-        '''
-        Iterator that returns one list of chop_size
-        elements of list_to_chop at a time. 
-        
-        @param list_to_chop: list whose elements are to be delivered
-            in chop_size chunks
-        @type list_to_chop: [<any>]
-        '''
-        for i in range(0, len(list_to_chop), chop_size):
-            yield list_to_chop[i:i + chop_size]        
-        
-
 
 # ----------------------- Main -------------
         
 if __name__ == '__main__':
     
-    usage = "Lists the available aux tables, and the ones that are missing. No options."
-    if len(sys.argv) > 1 and (sys.argv[1] == '-h' or sys.argv[1] == '--help'):
-        print(usage)
-        sys.exit(1)
-    LoadHistoryLister() 
+    parser = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),
+                                     formatter_class=argparse.RawTextHelpFormatter,
+                                     description="List aux table load histories, and missing tables."
+                                     )
+
+    parser.add_argument('-l', '--latest',
+                        help='list only the most recent load event for each table',
+                        action='store_true',
+                        default=False);
+    args = parser.parse_args();
+    
+    LoadHistoryLister(args.latest) 
     #LoadHistoryLister(unittests=True) 
         
