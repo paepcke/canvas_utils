@@ -6,10 +6,12 @@ Created on Aug 24, 2019
 import datetime
 import getpass
 import logging
+import math
 import os
 import re
 import shutil
 import socket
+import sys
 
 from pymysql_utils.pymysql_utils import MySQLDB
 
@@ -312,6 +314,13 @@ class Utilities(object):
         except Exception as e:
             raise DatabaseError("Cannot open Canvas database: %s" % repr(e))
         
+        # Work in UTC, b/c default on Mac MySQL 8 is local time,
+        # on Centos MySQL 5.7 is UTC; it's a mess:
+        
+        (err, _warn) = db.execute('SET @@session.time_zone = "+00:00"')
+        if err is not None:
+            self.log_warn(f"Cannot set session time zone to UTC: {repr(err)}")
+        
         return db
 
     #-------------------------
@@ -430,6 +439,119 @@ class Utilities(object):
                 raise RuntimeError("MySQL client not found on this machine (%s)" % socket.gethostname())
         return mysql_loc
     
+    #-------------------------
+    # print_columns
+    #--------------
+
+    def print_columns(self, 
+                      tbl_list, 
+                      header_str=None, 
+                      num_cols=4, 
+                      alpha=True,
+                      out_fd=sys.stdout):
+        '''
+        Print the given tables alphabetically in
+        columns.
+        
+        @param tbl_list: list of table names (can be other strings instead)
+        @type tbl_list: [str]
+        @param header_str: optional string for header of printout
+        @type header_str: str
+        @param num_cols: number of table names in one row
+        @type num_cols: int
+        @param alpha: whether or not to sort first
+        @type alpha: bool,
+        @param out_fd: file-like object to which output is written.
+        @type out_fd: file-like
+        '''
+
+        if alpha:       
+            tbls_print_ordered = sorted(tbl_list)
+        else:
+            tbls_print_ordered = tbl_list
+        
+        # Want to list in col_num columns, with alpha
+        # order going down columns. Ex. For tables 
+        # named 1,2,...,0, want to print:
+        #
+        #   1  5   9  13
+        #   2  6  10  14 
+        #   3  7  11  15
+        #   4  8  12  16
+        
+        # Number of needed rows; the ceiling is for
+        # the last row, which may not be all filled:
+        
+        num_rows = math.ceil(len(tbls_print_ordered) / num_cols)
+
+        # Get chunks of sorted table names 
+        # with chunk size being the number
+        # of rows we'll have. For 22 elements:
+        #
+        # cols_matrix = [[ 1, 2, 3, 4, 5, 6,],
+        #                [ 7, 8, 9,10,11,12,],
+        #                [13,14,15,16,17,18],
+        #                [19,20,21,22]
+        #               ]
+
+        rows_it      = self.list_chopper(tbls_print_ordered, num_rows)
+        cols_matrix  = [cols for cols in rows_it]
+
+        # Ensure the last row is either full, or
+        # filled with a space string in each empty
+        # column:
+        cols_matrix[-1] = self.fill_list_with_spaces(cols_matrix[-1], 
+                                                     num_rows)
+        # Make transpose to get lists of table names
+        # to print on one line:
+        
+        print_matrix = []
+        if header_str is not None:
+            out_fd.write(f"{header_str}\n\n")
+        for i in range(num_rows):
+            print_row = []
+            for j in range(num_cols-1):
+                print_row.append(cols_matrix[j][i])
+            print_matrix.append(print_row)
+
+        # Build print strings in nicely arranged column:
+        for print_row in print_matrix:
+            tabular_print_str = ''
+            for table_name in print_row:
+                tabular_print_str += f"{table_name:<23}"
+            # Print one line:
+            out_fd.write(tabular_print_str + '\n')
+
+    #-------------------------
+    # fill_list_with_spaces 
+    #--------------
+
+    def fill_list_with_spaces(self, the_list, desired_width):
+        if len(the_list) >= desired_width:
+            return the_list
+        # Have a short list.
+        new_list = the_list.copy()
+        # Make sure we are working with strings:
+        new_list = [str(el) for el in new_list]
+        for _i in range(desired_width - len(the_list)):
+            new_list.append(' ')
+        return new_list
+
+    #-------------------------
+    # list_chopper 
+    #--------------
+    
+    def list_chopper(self, list_to_chop, chop_size):
+        '''
+        Iterator that returns one list of chop_size
+        elements of list_to_chop at a time. 
+        
+        @param list_to_chop: list whose elements are to be delivered
+            in chop_size chunks
+        @type list_to_chop: [<any>]
+        '''
+        for i in range(0, len(list_to_chop), chop_size):
+            yield list_to_chop[i:i + chop_size]        
 
         
     # ------------------------ Logging Related Utilities -------------        
