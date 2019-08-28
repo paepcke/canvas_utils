@@ -28,7 +28,7 @@ class BackupRemover(object):
     def __init__(self,
                  num_to_keep=None,
                  user=None, 
-                 pwd=None, 
+                 db_pwd=None, 
                  target_db=None, 
                  host=None,
                  tables=[],
@@ -54,10 +54,10 @@ class BackupRemover(object):
         @type num_to_keep: int
         @param user: MySQL user for login
         @type user: str
-        @param pwd: password for logging into MySQL. Don't use
+        @param db_pwd: password for logging into MySQL. Don't use
             for security reasons. Instead, put the pwd into
             $HOME/.ssh/canvas_pwd
-        @type pwd: str
+        @type db_pwd: str
         @param target_db: MySQL where aux tables reside. 
         @type target_db: str
         @param host: MySQL host name
@@ -83,9 +83,11 @@ class BackupRemover(object):
         if host is None:
             host = config_info.default_host
         
-        if pwd is None:
-            pwd = self.utils.get_db_pwd(host, unittests)
-        
+        if db_pwd is None:
+            db_pwd = self.utils.get_db_pwd(host, unittests=unittests)
+        elif db_pwd == True:
+            db_pwd = self.utils.get_db_pwd(host, ask_user= True, unittests=unittests)
+
         if target_db is None:
             target_db = self.config_info.canvas_db_aux
 
@@ -102,7 +104,7 @@ class BackupRemover(object):
         # Unittests expect a db name in self.db:
         self.db = target_db
 
-        self.db_obj = self.utils.log_into_mysql(user, pwd, db=target_db, host=host)
+        self.db_obj = self.utils.log_into_mysql(user, db_pwd, db=target_db, host=host)
 
         self.utils.setup_logging(logging_level)
         if unittests:
@@ -299,7 +301,7 @@ if __name__ == '__main__':
     args = parser.parse_args();
     BackupRemover(args.num_to_keep,
                   user=args.user,
-                  pwd=args.password, 
+                  db_pwd=args.password, 
                   target_db=args.database, 
                   host=args.host,
                   tables=args.table,

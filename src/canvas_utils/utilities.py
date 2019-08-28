@@ -252,7 +252,7 @@ class Utilities(object):
     # get_db_pwd
     #--------------
 
-    def get_db_pwd(self, host, unittests=False):
+    def get_db_pwd(self, host, ask_user=False, unittests=False):
         '''
         Find appropriate password for logging into MySQL. Normally
         a file is expected in CanvasPrep.canvas_pwd_file, and
@@ -272,13 +272,22 @@ class Utilities(object):
         
         @param host: name of server where MySQL service resides
         @type host: str
+        @param ask_user: if True, request password on command line
+        @type ask_user: bool
         @param unittests: whether or not caller is running
+        @type unittests:
             unittests.
         @type: bool
         '''
         
+        pwd_cli_req = "Password for Canvas database: "
         if host == 'localhost' and unittests:
             return ''
+        
+        # Was -p/--password option used on command line?
+        if ask_user:
+            pwd = getpass.getpass(pwd_cli_req)
+            return pwd
         
         HOME = os.getenv('HOME')
         if HOME is not None:
@@ -288,31 +297,32 @@ class Utilities(object):
                     pwd = fd.readline().strip()
                     return pwd
             
-        # Ask on console:
-        pwd = getpass.getpass("Password for Canvas database: ")
+        # Even though not ask_user, could not get pwd from
+        # file in .ssh. So ask on console anyway:
+        pwd = getpass.getpass(pwd_cli_req)
         return pwd
 
     #-------------------------
     # log_into_mysql 
     #--------------
             
-    def log_into_mysql(self, user, pwd, db=None, host='localhost', **kwargs):
+    def log_into_mysql(self, user, db_pwd, db=None, host='localhost', **kwargs):
         
         try:
             # Try logging in, specifying the database in which all the tables
             # will be created: 
-            db = MySQLDB(user=user, passwd=pwd, db=db, host=host, **kwargs)
+            db = MySQLDB(user=user, passwd=db_pwd, db=db, host=host, **kwargs)
         except ValueError as e:
             # Does the db not exist yet?
             if str(e).find("OperationalError(1049,") > -1:
                 # Log in, specifying an always present db to 'use':
-                db =  MySQLDB(user=user, passwd=pwd, db='information_schema', host=host)
+                db =  MySQLDB(user=user, passwd=db_pwd, db='information_schema', host=host)
                 # Create the db:
                 db.execute('CREATE DATABASE %s;' % self.config_info.canvas_db_aux)
             else:
-                raise DatabaseError("Cannot open Canvas database: %s" % repr(e))
+                raise DatabaseError(f"Cannot open Canvas database:\n{repr(e)}")
         except Exception as e:
-            raise DatabaseError("Cannot open Canvas database: %s" % repr(e))
+            raise DatabaseError(f"Cannot open Canvas database:\n{repr(e)}")
         
         # Work in UTC, b/c default on Mac MySQL 8 is local time,
         # on Centos MySQL 5.7 is UTC; it's a mess:
@@ -368,6 +378,32 @@ class Utilities(object):
                               ''')
         table_names = [res for res in tables_res]
         return table_names        
+
+    #------------------------------------
+    # table_exists 
+    #-------------------    
+        
+    def table_exists(self, table_name, db_obj):
+        '''
+        Returns true if table_name exists in database,
+        else false.
+        
+        @param table_name: name of table to check (no leading data schema name)
+        @type table_name: str
+        @param db_obj: database object to use
+        @type db_obj: MySQLDB
+        @return: True/False
+        @rtype: bool
+        '''
+        
+        res = db_obj.query(f'''
+                             SELECT table_name 
+                               FROM information_schema.tables
+                              WHERE table_name = '{table_name}'
+                                AND table_schema = '{db_obj.dbName()}';
+                             '''
+                             )
+        return res is not None
         
     #------------------------------------
     # sort_backup_table_names 

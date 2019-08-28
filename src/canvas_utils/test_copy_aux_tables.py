@@ -114,7 +114,7 @@ class AuxTableCopyTester(unittest.TestCase):
         
         self.copier = AuxTableCopier(user=user, 
                                      host=test_host, 
-                                     pwd=mysql_pwd,
+                                     db_pwd=mysql_pwd,
                                      unittests=True,
                                      unittest_db_name=self.db_name)
         
@@ -435,18 +435,18 @@ class AuxTableCopyTester(unittest.TestCase):
     #--------------
         
     @classmethod
-    def log_into_mysql(cls, user, pwd, db=None):
+    def log_into_mysql(cls, user, db_pwd, db=None):
         
         host = AuxTableCopyTester.test_host
         try:
             # Try logging in, specifying the database in which all the tables
             # will be created: 
-            db = MySQLDB(user=user, passwd=pwd, db=db, host=host)
+            db = MySQLDB(user=user, passwd=db_pwd, db=db, host=host)
         except ValueError as e:
             # Does unittest not exist yet?
             if str(e).find("OperationalError(1049,") > -1:
                 # Log in without specifying a db to 'use':
-                db =  MySQLDB(user=user, passwd=pwd, host=host)
+                db =  MySQLDB(user=user, passwd=db_pwd, host=host)
                 # Create the db:
                 db.execute('CREATE DATABASE %s;' % 'unittest')
             else:

@@ -87,8 +87,8 @@ class CanvasUtilsTests(unittest.TestCase):
         prep_obj = CanvasPrep(host=cls.test_host,
                               user=cls.user,
                               target_db=db_name,
-                              pwd=cls.utils.get_db_pwd(cls.test_host,
-                                                       unittests=True),
+                              db_pwd=cls.utils.get_db_pwd(cls.test_host,
+                                                          unittests=True),
                               unittests=True
                               )
 
@@ -119,8 +119,8 @@ class CanvasUtilsTests(unittest.TestCase):
         self.prep_obj  = CanvasPrep(user=self.user, 
                               host=self.test_host, 
                               target_db=self.db_schema,
-                              pwd=self.utils.get_db_pwd(self.test_host,
-                                                        unittests=True),
+                              db_pwd=self.utils.get_db_pwd(self.test_host,
+                                                           unittests=True),
                               unittests=True)
         self.db        = self.prep_obj.db
         self.utils     = CanvasUtilsTests.utils
@@ -233,8 +233,8 @@ class CanvasUtilsTests(unittest.TestCase):
         
         restorer = TableRestorer(
                      user=self.user,
-                     pwd=self.utils.get_db_pwd(self.test_host,
-                                               unittests=True), 
+                     db_pwd=self.utils.get_db_pwd(self.test_host,
+                                                  unittests=True), 
                      target_db=self.db_schema, 
                      host=self.test_host,
                      unittests=True)     

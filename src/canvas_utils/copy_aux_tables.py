@@ -49,7 +49,7 @@ class AuxTableCopier(object):
 
     def __init__(self, 
                  user=None, 
-                 pwd=None,
+                 db_pwd=None,
                  host=None, 
                  dest_dir='/tmp', 
                  overwrite_existing=True,
@@ -63,8 +63,8 @@ class AuxTableCopier(object):
         
         @param user: login user for database. Default: AuxTableCopier.default_user  
         @type user: str
-        @param pwd: password for database. Default: read from file AuxTableCopier.canvas_pwd_file
-        @type pwd:{str | None}
+        @param db_pwd: password for database. Default: read from file AuxTableCopier.canvas_pwd_file
+        @type db_pwd:{str | None | bool}
         @param host: host of the source db. Default: AuxTableCopier.host
         @type host: str
         @param dest_dir: directory where to place the .sql/.csv files. Default /tmp 
@@ -108,11 +108,6 @@ class AuxTableCopier(object):
         else:
             self.user = user
         
-        # If pwd is None, as it ought to be,
-        # then any use of pwd will use the get_db_pwd()
-        # method below:
-        self.pwd = pwd
-            
         if dest_dir is None:
             self.dest_dir = '/tmp'
         else:
@@ -144,7 +139,13 @@ class AuxTableCopier(object):
         # for this quantity: 
         self.__schema = None
 
-        self.pwd = self.utils.get_db_pwd(self.host, unittests)
+        if db_pwd is None:
+            db_pwd = self.utils.get_db_pwd(host, unittests=unittests)
+        elif db_pwd == True:
+            db_pwd = self.utils.get_db_pwd(host, ask_user= True, unittests=unittests)
+
+        self.pwd = db_pwd
+
         if unittests:
             
             # In case the connect_to_src_db() call
@@ -1076,7 +1077,7 @@ if __name__ == '__main__':
         
     # copier = AuxTableCopier(tables=['Terms'])
     copier = AuxTableCopier(user=args.user,
-                            pwd=args.password,
+                            db_pwd=args.password,
                             host=args.host,
                             dest_dir=args.destdir,
                             tables=args.table,

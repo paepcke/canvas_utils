@@ -47,7 +47,7 @@ class LoadHistoryLister(object):
         if unittests:
             self.db_obj = self.utils.log_into_mysql(config_info.test_default_user,
                                                     self.utils.get_db_pwd(config_info.test_default_host,
-                                                                          unittests),
+                                                                          unittests=unittests),
                                                     db=self.aux_db,
                                                     host=config_info.test_default_host,
                                                     cursor_class = Cursors.DICT
@@ -57,7 +57,7 @@ class LoadHistoryLister(object):
         else:
             self.db_obj = self.utils.log_into_mysql(config_info.default_user,
                                                     self.utils.get_db_pwd(config_info.default_host,
-                                                                          unittests),
+                                                                          unittests=unittests),
                                                     db=config_info.canvas_db_aux,
                                                     host=config_info.default_host,
                                                     cursor_class = Cursors.DICT

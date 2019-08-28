@@ -7,7 +7,6 @@ Created on Jan 1, 2019
 
 import argparse
 import datetime
-import getpass
 import logging
 from os import getenv
 import os
@@ -88,7 +87,7 @@ class CanvasPrep(object):
 
     def __init__(self, 
                  user=None, 
-                 pwd=None, 
+                 db_pwd=None, 
                  target_db=None, 
                  host=None,
                  tables=[],
@@ -100,8 +99,9 @@ class CanvasPrep(object):
         '''
         @param user: login user for database
         @type user: str
-        @param pwd: password for database
-        @type pwd:str
+        @param db_pwd: password for database. If a string, use that
+            as pwd. If bool and True: -p was on CLI: ask on CLI
+        @type db_pwd:{str | bool}
         @param target_db: schema into which to place new tables in target database
         @type target_db: str
         @param host: MySQL host name
@@ -162,10 +162,12 @@ class CanvasPrep(object):
             
         self.host = host
         
-        if pwd is None:
-            pwd = self.utils.get_db_pwd(host, unittests)
+        if db_pwd is None:
+            db_pwd = self.utils.get_db_pwd(host, unittests=unittests)
+        elif db_pwd == True:
+            db_pwd = self.utils.get_db_pwd(host, ask_user= True, unittests=unittests)
         
-        self.pwd = pwd 
+        self.pwd = db_pwd 
         
         if target_db is None:
             target_db = config_info.canvas_db_aux
@@ -892,34 +894,11 @@ class CanvasPrep(object):
         return tables_found
  
         
-    #------------------------------------
-    # table_exists 
-    #-------------------    
-        
-    def table_exists(self, table_name):
-        '''
-        Returns true if table_name exists in database,
-        else false.
-        
-        @param table_name: name of table to check (no leading data schema name)
-        @type table_name: str
-        @return: True/False
-        @rtype: bool
-        '''
-        
-        res = self.db.query(f'''
-                             SELECT table_name 
-                               FROM information_schema.tables
-                              WHERE table_name = '{table_name}'
-                                AND table_schema = '{self.db.dbName()}';
-                             '''
-                             )
-        return res is not None
-        
-
 # ----------------------------- Main ------------------------
 
 if __name__ == '__main__':
+    
+    config_info = ConfigInfo()
     
     parser = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),
                                      formatter_class=argparse.RawTextHelpFormatter,
@@ -943,8 +922,8 @@ if __name__ == '__main__':
                         
     parser.add_argument('-u', '--user',
                         help=f'user name for logging into the canvas database.\n' +
-                             f'Default as per setup.cfg. If no setup.cfg: {CanvasPrep.default_user}',
-                        default=None)
+                             f'Default: {config_info.default_user}.',
+                        default=config_info.default_user)
                         
     parser.add_argument('-p', '--password',
                         help='password for logging into the canvas database.\n' +
@@ -953,11 +932,9 @@ if __name__ == '__main__':
                         default=None)
                         
     parser.add_argument('-o', '--host',
-                        help=f'host name or ip of database. Default: as per setup.cfg, else\n' +
-                             f'if no setup.cfg: {CanvasPrep.default_host}',
-                        default=None)
-                        #default='canvasdata-prd-db1.ci6ilhrc8rxe.us-west-1.rds.amazonaws.com')
-                        #default='canvasdata-prd-db1.cupga556ks1y.us-west-1.rds.amazonaws.com')
+                        help=f'host name or ip of database.\n' +
+                             f'Default: {config_info.default_host}',
+                        default=config_info.default_host)
                         
     parser.add_argument('-t', '--table',
                         nargs='+',
@@ -967,8 +944,8 @@ if __name__ == '__main__':
 
     parser.add_argument('-d', '--database',
                         help=f'MySQL/Aurora database (schema) into which new tables are to be placed.\n' +
-                             f'Default: as per setup.cfg, else {CanvasPrep.canvas_db_aux}',
-                        default=None)
+                             f'Default: {config_info.canvas_db_aux}',
+                        default=config_info.canvas_db_aux)
     
     parser.add_argument('-q', '--quiet',
                         help='if present, only error conditions are shown on screen. Default: False',
@@ -987,14 +964,8 @@ if __name__ == '__main__':
         CanvasPrep.list_tables()
         sys.exit()
 
-    if args.password:
-        # Get pwd from CLI with invisible chars:
-        pwd = getpass.getpass('Password for user {given_user} at {host}: '.format(given_user=args.user,
-                                                                                host=args.host))
-    else:
-        pwd = None
     CanvasPrep(user=args.user,
-               pwd=pwd,
+               db_pwd=args.password,
                host=args.host,
                target_db=args.database,
                tables=args.table,
