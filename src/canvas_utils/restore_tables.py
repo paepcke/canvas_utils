@@ -384,13 +384,16 @@ if __name__ == '__main__':
 
     args = parser.parse_args();
     
-    TableRestorer(user=args.user,
-                  db_pwd=args.password, 
-                  target_db=args.database, 
-                  host=args.host,
-                  tables=args.table,
-                  force=args.force,
-                  logging_level=logging.INFO,
-                  unittests=False)
-    
-    print("Done")
+    try:
+        TableRestorer(user=args.user,
+                      db_pwd=args.password, 
+                      target_db=args.database, 
+                      host=args.host,
+                      tables=args.table,
+                      force=args.force,
+                      logging_level=logging.INFO,
+                      unittests=False)
+    except KeyboardInterrupt:
+        print("\nCanvas aux table restoration stopped by user.")    
+    else:
+        print("Done")

@@ -287,7 +287,7 @@ class CanvasPrep(object):
             else:
                 completed_tables = self.create_tables(completed_tables=completed_tables)
                 BackupRemover(user=self.user,
-                              pwd=self.pwd,
+                              db_pwd=self.pwd,
                               target_db=self.target_db,
                               host=self.host
                               )
@@ -964,13 +964,16 @@ if __name__ == '__main__':
         CanvasPrep.list_tables()
         sys.exit()
 
-    CanvasPrep(user=args.user,
-               db_pwd=args.password,
-               host=args.host,
-               target_db=args.database,
-               tables=args.table,
-               new_only=args.newonly,
-               skip_backups=args.skipbackup,
-               dryrun=args.dryrun,
-               logging_level=logging.ERROR if args.quiet else logging.INFO  
-               ).run()
+    try:
+        CanvasPrep(user=args.user,
+                   db_pwd=args.password,
+                   host=args.host,
+                   target_db=args.database,
+                   tables=args.table,
+                   new_only=args.newonly,
+                   skip_backups=args.skipbackup,
+                   dryrun=args.dryrun,
+                   logging_level=logging.ERROR if args.quiet else logging.INFO  
+                   ).run()
+    except KeyboardInterrupt:
+        print("\nCanvas aux table generation stopped by user.")

@@ -231,7 +231,11 @@ if __name__ == '__main__':
                         action='store_true',
                         default=False);
     args = parser.parse_args();
-    
-    LoadHistoryLister(args.latest) 
+
+    try:    
+        LoadHistoryLister(args.latest)
+    except KeyboardInterrupt:
+        print("\nLoad history listing stopped by user.")    
+         
     #LoadHistoryLister(unittests=True) 
         

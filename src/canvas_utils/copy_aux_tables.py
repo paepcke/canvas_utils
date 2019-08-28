@@ -1076,16 +1076,18 @@ if __name__ == '__main__':
     args = parser.parse_args()
         
     # copier = AuxTableCopier(tables=['Terms'])
-    copier = AuxTableCopier(user=args.user,
-                            db_pwd=args.password,
-                            host=args.host,
-                            dest_dir=args.destdir,
-                            tables=args.table,
-                            copy_format=args.format,
-                            overwrite_existing=args.remove    
-                            )
-
-    copy_result = copier.copy_tables()
+    try:
+        copier = AuxTableCopier(user=args.user,
+                                db_pwd=args.password,
+                                host=args.host,
+                                dest_dir=args.destdir,
+                                tables=args.table,
+                                copy_format=args.format,
+                                overwrite_existing=args.remove    
+                                )
+        copy_result = copier.copy_tables()
+    except KeyboardInterrupt:
+        print("\nCanvas aux table copy stopped by user.")    
     
     
         

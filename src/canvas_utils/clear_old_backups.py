@@ -299,11 +299,14 @@ if __name__ == '__main__':
                         default=f'{config_info.canvas_db_aux}')
     
     args = parser.parse_args();
-    BackupRemover(args.num_to_keep,
-                  user=args.user,
-                  db_pwd=args.password, 
-                  target_db=args.database, 
-                  host=args.host,
-                  tables=args.table,
-                  logging_level=logging.INFO,
-                  unittests=False)
+    try:    
+        BackupRemover(args.num_to_keep,
+                      user=args.user,
+                      db_pwd=args.password, 
+                      target_db=args.database, 
+                      host=args.host,
+                      tables=args.table,
+                      logging_level=logging.INFO,
+                      unittests=False)
+    except KeyboardInterrupt:
+        print("\nBackup removal stopped by user.")    
