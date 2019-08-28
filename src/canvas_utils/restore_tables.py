@@ -16,7 +16,24 @@ from config_info import ConfigInfo
 
 class TableRestorer(object):
     '''
-    classdocs
+    Restores tables from their most recent backup.
+    When tables are created by canvas_prep.py, already
+    existing tables are copied first.
+    
+    This class helps manage those backups from the command 
+    line. Behavior for a table T to be restored:
+    
+    1. Check whether T exists. If so, only proceed with restore
+       if the -f/--force option was issued in the command line.
+    2. Find the latest backup B. Backup tables are named as:
+          T_<backup-date-time>
+       If no backup table is found, *****
+    3. Table B is renamed to T
+    
+    Without any table names on the command line, all tables are
+    treated as above. If a particular backup table is listed, that 
+    backup will be restored. If an aux table (not one of its backups)
+    is named, proceed as usual, but only for that table. 
     '''
 
     #------------------------------------
@@ -25,7 +42,7 @@ class TableRestorer(object):
 
     def __init__(self, 
                  user=None, 
-                 pwd=None, 
+                 db_pwd=None, 
                  target_db=None, 
                  host=None,
                  tables=[],
@@ -33,7 +50,28 @@ class TableRestorer(object):
                  logging_level=logging.INFO,
                  unittests=False):
         '''
-        Constructor
+        @param user: login user for database
+        @type user: str
+        @param db_pwd: password for database. If a string, use that
+            as pwd. If bool and True: -p was on CLI: ask on CLI
+        @type db_pwd:{str | bool}
+        @param target_db: schema into which to place new tables in target database
+        @type target_db: str
+        @param host: MySQL host name
+        @type host: str
+        @param tables: optional list of tables to (re)-create
+        @type tables: [str]
+        @param force: if true, replace even existing tables 
+            with their backups. Else, only restore backups
+            to create none-existing tables.
+        @type force: bool
+        @param logging_level: how much of the run to document
+        @type logging_level: logging.INFO/DEBUG/ERROR/...
+        @param unittests: set to True to have this instance do 
+            nothing but initialization of constants. Used to allow
+            unittests to call methods in isolation.
+        @type unittests: boolean
+
         '''
         
         self.config_info = ConfigInfo()
@@ -46,9 +84,14 @@ class TableRestorer(object):
         
         # Unittests expect a db name in self.db:
         self.db = target_db
-
+        
+        if db_pwd is None:
+            db_pwd = self.utils.get_db_pwd(host, unittests=unittests)
+        elif db_pwd == True:
+            db_pwd = self.utils.get_db_pwd(host, ask_user= True, unittests=unittests)
+        
         self.utils.setup_logging(loggingLevel=logging_level)
-        self.db_obj = self.utils.log_into_mysql(user, pwd, db=target_db, host=host)
+        self.db_obj = self.utils.log_into_mysql(user, db_pwd, db=target_db, host=host)
 
         if unittests:
             self.db_name = target_db
@@ -67,6 +110,15 @@ class TableRestorer(object):
         # the following loop:
 
         if len(tables) > 0: 
+            # Ensure all requested tables exist:
+            existing_tbls_set  = set(all_tables)
+            requested_tbls_set = set(tables)
+            if not requested_tbls_set.issubset(existing_tbls_set):
+                # At least some of the tbles requested to be
+                # restored don't exist:
+                bad_tables = requested_tbls_set - existing_tbls_set
+                print(f"Table(s) {bad_tables} not present in db {target_db}")
+                sys.exit(1)
             all_tbls_copy = all_tables.copy()
             for candidate_tbl in all_tbls_copy:
                 if not candidate_tbl in tables:
@@ -77,11 +129,21 @@ class TableRestorer(object):
         # from all_tables:
         if not force:
             all_tables = self.remove_table_groups(all_tables)
+            if len(all_tables) == 0:
+                help_msg = '''
+Nothing to restore; did you mean to specify -f/--force?\n 
+Without --force, just tables that *only* have backup versions are
+restored. Ex.: if, say, table Terms and some backups for it exist,
+Terms will not be overwritten, unless you opt for --force. If Terms
+did not exist, it would be created from its latest backup.
+'''                
+                print(help_msg)
+                sys.exit()
             
         # If particular tables are to be restored,
         # remove all unrelated tables:
         
-        self.restore_tables(target_db, all_tables, force)
+        self.restore_tables(table_names=all_tables, target_db=target_db)
         
     #------------------------------------
     # restore_tables 
@@ -103,16 +165,19 @@ class TableRestorer(object):
         @return: list of tables
         @rtype: [str]
         '''
-
+        
+        # If no tables specified on command line, 
+        # process all aux tables:
         if table_names is None:
             table_names = self.utils.tables
         
         self.restore_from_backup(table_names, db_schema=target_db)
         
         # Get the aux table names that exist now, after the restore:
-        tbls_now = self.utils.get_existing_tables_in_dir(self.db_obj, return_all=False, target_db=target_db)
+        tbls_now = self.utils.get_existing_tables_in_dir(self.db_obj, 
+                                                         return_all=False, 
+                                                         target_db=target_db)
         return tbls_now
-            
                 
     #------------------------------------
     # remove_table_groups
@@ -227,7 +292,7 @@ class TableRestorer(object):
                 # Got an explicit backup filename to restore:
                 (root_name, _date_str, _datetime_obj) = tbl_nm_components
                 
-                if not self.table_exists(table_name):
+                if not self.utils.table_exists(table_name, self.db_obj):
                     raise ValueError(f"Table {table_name} does not exist, so cannot be restored to the working copy.")
                 
                 self.db_obj.dropTable(root_name)
@@ -238,12 +303,12 @@ class TableRestorer(object):
                 continue
             elif table_name in self.utils.tables:
                 # Table is a root name; find the most recent backup:
-                res = self.db_obj.query(f'''
+                info_query = f'''
                                          select table_name 
                                            from information_schema.tables
                                           where table_schema = '{db_schema}'
-                                            AND table_name like '{table_name}%';   
-                                        ''')
+                                            AND table_name like '{table_name}%';'''
+                res = self.db_obj.query(info_query)
                 backup_tbl_names = [tbl_name for tbl_name in res if self.utils.is_backup_name(tbl_name)]
 
                 if len(backup_tbl_names) == 0:
@@ -296,9 +361,9 @@ if __name__ == '__main__':
                         default=None)
                         
     parser.add_argument('-o', '--host',
-                        help='host name or ip of database. Default: Canvas production database.',
-                        default='canvasdata-prd-db1.ci6ilhrc8rxe.us-west-1.rds.amazonaws.com')
-                        #default='canvasdata-prd-db1.cupga556ks1y.us-west-1.rds.amazonaws.com')
+                        help='host name or ip of database server.\n' +
+                            f'Default: {config_info.default_host}',
+                        default=config_info.default_host)
                         
     parser.add_argument('-t', '--table',
                         nargs='+',
@@ -307,8 +372,9 @@ if __name__ == '__main__':
                         )
 
     parser.add_argument('-d', '--database',
-                        help='MySQL/Aurora database (schema) into which new tables are to be placed. Default: canvasdata_aux',
-                        default='canvasdata_aux')
+                        help='MySQL/Aurora database (schema) into which new tables are to be placed.\n' +
+                            f'Default: {config_info.canvas_db_aux}',
+                        default=config_info.canvas_db_aux)
     
     parser.add_argument('-q', '--quiet',
                         help='if present, only error conditions are shown on screen. Default: False',
@@ -319,7 +385,7 @@ if __name__ == '__main__':
     args = parser.parse_args();
     
     TableRestorer(user=args.user,
-                  pwd=args.password, 
+                  db_pwd=args.password, 
                   target_db=args.database, 
                   host=args.host,
                   tables=args.table,
@@ -327,3 +393,4 @@ if __name__ == '__main__':
                   logging_level=logging.INFO,
                   unittests=False)
     
+    print("Done")
