@@ -174,25 +174,35 @@ class CanvasPrep(object):
             
         self.target_db = target_db
             
-        # If user wants only particular tables to be created
-        # then the tables arg will be a list of table names:
-        if tables is not None and len(tables) > 0:
-            CanvasPrep.tables = tables
-        else:
-            # No particular tables named on command line,
-            # So get all .sql file names in Query directory.
-            # Names are the table names.
-            CanvasPrep.tables = self.utils.create_table_name_array()
-
-        # Allow other modules to see which tables are of
-        # concern without having to import CanvasPrep
-        self.utils.tables = CanvasPrep.tables
-
         self.utils.setup_logging(logging_level)
         self.log_info = self.utils.log_info
         self.log_warn = self.utils.log_warn
         self.log_err  = self.utils.log_err
         
+        # If user wants only particular tables to be created
+        # then the tables arg will be a list of table names.
+        # Get a list of true tables represented in Queries:
+        
+        legitimate_tables = self.utils.create_table_name_array()
+        if tables is not None and len(tables) > 0:
+            # Did user make typo in the -t/--table option?
+            user_tbl_set   = set(tables)
+            legit_tbl_set  = set(legitimate_tables)
+            if not user_tbl_set.issubset(legit_tbl_set):
+                bad_tables = user_tbl_set - legit_tbl_set
+                print(f"Non-aux table(s): {bad_tables}")
+                sys.exit(1)
+            CanvasPrep.tables = tables
+        else:
+            # No particular tables named on command line,
+            # So get all .sql file names in Query directory.
+            # Names are the table names.
+            CanvasPrep.tables = legitimate_tables
+
+        # Allow other modules to see which tables are of
+        # concern without having to import CanvasPrep
+        self.utils.tables = CanvasPrep.tables
+
         # Create list of full paths to table
         # creation sql files:
         CanvasPrep.tbl_creation_paths = [self.file_nm_from_tble(tbl_nm) for tbl_nm in CanvasPrep.tables]
