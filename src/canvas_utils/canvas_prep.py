@@ -509,6 +509,11 @@ class CanvasPrep(object):
                 raise DatabaseError(f"Could not create table {tbl_nm}: {str(errors)}. \n Still to do in order: {tbls_to_do}")
 
             completed_tables.append(tbl_nm)
+            # The sql creation files in Queries sometimes 
+            # leave the db USEing the db of the raw Canvas
+            # db (canvasdata_prd). Make sure we start USEing
+            # the aux tables one again:
+            self.db.execute(f'USE {self.target_db}')
             # Make entry in table_refresh_log table:
             self.log_table_creation(tbl_nm)
             self.log_info('Done working on table %s' % tbl_nm)
