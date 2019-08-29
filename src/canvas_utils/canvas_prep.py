@@ -525,25 +525,8 @@ class CanvasPrep(object):
         
         self.db.execute(f'ANALYZE TABLE {tbl_nm}')
         
-        # Does the table exist?
+        self.utils.ensure_load_log_table_existence(load_log_tbl_nm, self.db)
         
-        res = self.db.query(f'''SELECT count(*)
-                             	  FROM information_schema.tables
-                            	 WHERE table_schema = '{curr_db_schema}'
-                            	   AND table_name = '{load_log_tbl_nm}';
-        ''')
-        if res.next() == 0:
-            # Log table doesn't exist yet.
-            # Create it:
-            (err, _warn) = self.db.execute(f'''CREATE TABLE {load_log_tbl_nm} (
-                                         		tbl_name varchar(255),
-                                        		time_refreshed DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                                        		num_rows int
-                                          )
-                                         ''')
-            if err is not None:
-                raise DatabaseError(f"Cannot create load log table {load_log_tbl_nm}: {repr(err)}")
-
         # Find number of rows in table:
         res = self.db.query(f'''SELECT table_rows
                              	  FROM information_schema.tables

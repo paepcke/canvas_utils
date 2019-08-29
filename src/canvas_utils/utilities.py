@@ -379,6 +379,36 @@ class Utilities(object):
         table_names = [res for res in tables_res]
         return table_names        
 
+    #-------------------------
+    # ensure_load_log_table_existence 
+    #--------------
+
+    def ensure_load_log_table_existence(self, load_log_tbl_nm, db_obj):
+        '''
+        Ensure that the LoadLog table exists. 
+        
+        @param load_log_tbl_nm: name of the table holding the load log.
+        @type load_log_tbl_nm: str
+        @param db_obj: database to use for checking and creating
+        @type db_obj: MySQLDB
+        '''
+
+        # Does the table exist?
+
+        if self.table_exists(load_log_tbl_nm, db_obj):
+            return
+
+        # Log table doesn't exist yet.
+        # Create it:
+        (err, _warn) = db_obj.execute(f'''CREATE TABLE {load_log_tbl_nm} (
+                                         		tbl_name varchar(255),
+                                    		    time_refreshed DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                                        		num_rows int
+                                          )
+                                         ''')
+        if err is not None:
+            raise DatabaseError(f"Cannot create load log table {load_log_tbl_nm}: {repr(err)}")
+
     #------------------------------------
     # table_exists 
     #-------------------    
@@ -403,7 +433,7 @@ class Utilities(object):
                                 AND table_schema = '{db_obj.dbName()}';
                              '''
                              )
-        return res is not None
+        return res.result_count() > 0
         
     #------------------------------------
     # sort_backup_table_names 

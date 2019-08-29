@@ -107,6 +107,7 @@ class LoadHistoryLister(object):
             #        ..
             #  ]
             if load_log_content is None:
+                self.utils.ensure_load_log_table_existence(self.load_table_name, self.db_obj)
                 load_log_content = self.db_obj.query(f"SELECT * FROM {self.aux_db}.{self.load_table_name}")
         except ValueError as e:
             out_fd.write(f"Cannot list tables: {repr(e)}\n")
