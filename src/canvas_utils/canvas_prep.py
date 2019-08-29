@@ -91,35 +91,44 @@ class CanvasPrep(object):
                  target_db=None, 
                  host=None,
                  tables=[],
+                 excludes=[],
                  new_only=False,
                  skip_backups=False,
                  dryrun=False, 
                  logging_level=logging.INFO,
                  unittests=False):
         '''
-        @param user: login user for database
+        
+        @param user: mysql user. Default set in setup.cfg
         @type user: str
-        @param db_pwd: password for database. If a string, use that
-            as pwd. If bool and True: -p was on CLI: ask on CLI
-        @type db_pwd:{str | bool}
-        @param target_db: schema into which to place new tables in target database
+        @param db_pwd: mysql password. Usually in ~/.ssh/canvas_pwd, or 
+            other file as specified in setup.cfg. Else requested on the
+            command line.
+        @type db_pwd: {None | str}
+        @param target_db: name of the database (a.k.a. MySQL schema) in
+            the MySQL server. Can be set in setup.cfg
         @type target_db: str
-        @param host: MySQL host name
-        @type host: str
-        @param tables: optional list of tables to (re)-create
+        @param host: name, or IP of machine that runs the MySQL service.
+            Can be set in setup.cfg
+        @type host: str 
+        @param tables: optional list of aux tables to create. Default is None,
+            which means create all aux tables
         @type tables: [str]
-        @param new_only: if true, only table that don't already exist are created
+        @param excludes: optional list of aux tables to *not* create
+        @type excludes: [str]
+        @param new_only: if true, only create aux tables that don't already exist
+            in the database
         @type new_only: bool
-        @param skip_backups: if true, don't backup already existing tables before overwriting them
+        @param skip_backups: normally, when aux tables are created, and would overwrite
+            an existing table, that existing table is backed up. With False here, 
+            no backup is created.
         @type skip_backups: bool
-        @param dryrun: if True, only print what would be done.
-        @type dryrun: bool 
-        @param logging_level: how much of the run to document
-        @type logging_level: logging.INFO/DEBUG/ERROR/...
-        @param unittests: set to True to have this instance do 
-            nothing but initialization of constants. Used to allow
-            unittests to call methods in isolation.
-        @type unittests: boolean
+#        @param dryrun: only print what would be done, make no changes
+#        @type dryrun: bool
+        @param logging_level: how much logging to do.
+        @type logging_level: logging.{INFO|WARNING|ERROR|DEBUG|CRITICAL|NOTSET}
+        @param unittests: whether or not this instance is created for unit testing
+        @type unittests: bool
         '''
 
         # Access to convenience funcations:
@@ -175,6 +184,7 @@ class CanvasPrep(object):
             target_db = target_db
             
         self.target_db = target_db
+        self.excludes = excludes
             
         self.utils.setup_logging(logging_level)
         self.log_info = self.utils.log_info
@@ -266,6 +276,10 @@ class CanvasPrep(object):
             # Just pretend no tables exist:
             completed_tables = []
         
+        if len(self.excludes) > 0:
+            # Pretend the excluded tables are already done:
+            completed_tables.extend(self.excludes)
+                    
         # Get a fresh copy of the Explore Courses .xml file?
         
         # We are supposed to refresh the ExploreCourses table.
@@ -902,6 +916,12 @@ if __name__ == '__main__':
                         help="only create tables that don't already exist; default: false",
                         action='store_true',
                         default=False);
+    
+    parser.add_argument('-e', '--excludes',
+                        nargs='+',
+                        help='Name of one or more specific table(s) to NOT create.',
+                        default=[]
+                        )
                         
     parser.add_argument('-s', '--skipbackup',
                         help="don't back up tables that are overwritten; default: false",
@@ -940,10 +960,10 @@ if __name__ == '__main__':
                         action='store_true',
                         default=False);
                         
-    parser.add_argument('-y', '--dryrun',
-                        help='if present, only print what would be done. Default: False',
-                        action='store_true',
-                        default=False);
+#     parser.add_argument('-y', '--dryrun',
+#                         help='if present, only print what would be done. Default: False',
+#                         action='store_true',
+#                         default=False);
 
     args = parser.parse_args();
 
@@ -958,9 +978,10 @@ if __name__ == '__main__':
                    host=args.host,
                    target_db=args.database,
                    tables=args.table,
+                   excludes=args.excludes,
                    new_only=args.newonly,
                    skip_backups=args.skipbackup,
-                   dryrun=args.dryrun,
+                   #dryrun=args.dryrun,
                    logging_level=logging.ERROR if args.quiet else logging.INFO  
                    ).run()
     except KeyboardInterrupt:
