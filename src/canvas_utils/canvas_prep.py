@@ -11,9 +11,9 @@ import logging
 from os import getenv
 import os
 import pickle
-import pwd
 import re
 import shutil
+import stat
 import subprocess
 import sys
 
@@ -615,6 +615,11 @@ class CanvasPrep(object):
         # Copy the .csv file to /tmp so that the Queries/ExploreCourses.sql
         # can find it to import:
         shutil.copy(csv_outfile, '/tmp')
+        os.chmod(csv_outfile,
+                 stat.S_IRUSR | stat.S_IWUSR |  # RW owner
+                 stat.S_IRGRP | stat.S_IWGRP |  # RW group
+                 stat.S_IROTH | stat.S_IWOTH    # RW other
+                 )
 
     #-------------------------
     # try_use_old_ec_file 
