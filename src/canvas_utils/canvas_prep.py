@@ -547,11 +547,7 @@ class CanvasPrep(object):
         self.utils.ensure_load_log_table_existence(load_log_tbl_nm, self.db)
         
         # Find number of rows in table:
-        res = self.db.query(f'''SELECT table_rows
-                             	  FROM information_schema.tables
-                            	 WHERE table_schema = '{curr_db_schema}'
-                            	   AND table_name = '{tbl_nm}';
-        ''')
+        res = self.db.query(f'''SELECT COUNT(*) FROM {tbl_nm}''')
         num_rows = res.next()
              
         # Make the entry:
