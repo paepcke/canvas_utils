@@ -53,7 +53,8 @@ The schema files contain SQL `CREATE TABLE` statements. The .csv files will cont
 ## Installation
 
 Known unpleasantness: Ensure that mysql_config is installed. It is included in the MySQL server installation. Right now this dependency forces the server installation, even though the server is not used. 
-Then:
+
+It is generally recommended to use a Python virtual environment, such as [Anaconda](https://www.anaconda.com/distribution/), [Virtualenv](https://virtualenv.pypa.io/en/latest/), or Python 3's [venv](https://docs.python.org/3/library/venv.html). These ensure that no root access is needed during installation:
 
 `pip install canvas_utils`
 
