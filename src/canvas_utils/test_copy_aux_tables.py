@@ -20,6 +20,7 @@ from utilities import Utilities
 
 #from copy_aux_tables import SchemaColumn
 #from copy_aux_tables import SchemaIndex
+
 TEST_ALL = True
 #TEST_ALL = False
 

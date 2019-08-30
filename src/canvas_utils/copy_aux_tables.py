@@ -9,37 +9,20 @@ import argparse
 import collections.abc
 import csv
 import logging
-from os import getenv
 import os
 from subprocess import PIPE
 import subprocess
 import sys
 
-from pymysql_utils.pymysql_utils import MySQLDB
-
 from query_sorter import TableError
 from utilities import Utilities
-
+from config_info import ConfigInfo
 
 class AuxTableCopier(object):
     '''
-    classdocs
+    Exports aux tables as .csv from aux database into a
+    given directory.
     '''
-    
-    #default_user = 'canvasdata_prd'
-    default_user = 'canvasdata_prd'
-    
-    # Host of db where tables are stored:
-                           
-    host = 'canvasdata-prd-db1.ci6ilhrc8rxe.us-west-1.rds.amazonaws.com'
-    #host = 'canvasdata-prd-db1.cupga556ks1y.us-west-1.rds.amazonaws.com'
-    
-    # Canvas pwd file name:
-    canvas_pwd_file = os.path.join(getenv("HOME"), '.ssh', 'canvas_pwd') 
-    
-    # Name of MySQL db (schema) where new,
-    # auxiliary tables will be placed:
-    canvas_db_aux = 'canvasdata_aux'
     
     file_ext = None
         
@@ -61,18 +44,18 @@ class AuxTableCopier(object):
                  ):
         '''
         
-        @param user: login user for database. Default: AuxTableCopier.default_user  
+        @param user: login user for database. Default: default_user in setup.cfg  
         @type user: str
-        @param db_pwd: password for database. Default: read from file AuxTableCopier.canvas_pwd_file
+        @param db_pwd: password for database. Default: read from file set in setup.cfg
         @type db_pwd:{str | None | bool}
-        @param host: host of the source db. Default: AuxTableCopier.host
+        @param host: host of the source db. Default: default_host in setup.cfg
         @type host: str
         @param dest_dir: directory where to place the .sql/.csv files. Default /tmp 
         @type dest_dir: str
         @param overwrite_existing: whether or not to delete files in the target
               dir. If false, must manually delete first.
         @type overwrite_existing: bool
-        @param tables: optional list of tables to copy. Default all in AuxTableCopier.tables
+        @param tables: optional list of tables to copy. Default all Queries subdirectory
         @type tables: [str]
         @param copy_format: whether to copy as mysqldump or csv
         @type copy_format: {'sql' | 'csv'}
@@ -88,15 +71,7 @@ class AuxTableCopier(object):
         
         # Access to common functionality:
         self.utils = Utilities()
-        
-        if unittests:
-            # Running unittests on localhost. We stipulate
-            # that a db 'Unittest' exists to which user
-            # unittest has permissions:
-            if unittest_db_name is None:
-                AuxTableCopier.canvas_db_aux = 'Unittest'
-            else:
-                AuxTableCopier.canvas_db_aux = unittest_db_name
+        self.config_info = ConfigInfo()
         
         self.unittests = unittests
         self.utils.setup_logging(logging_level)
@@ -104,13 +79,23 @@ class AuxTableCopier(object):
         self.log_info = self.utils.log_info
         
         if user is None:
-            self.user = AuxTableCopier.default_user
+            if self.unittests:
+                self.user = self.config_info.test_default_user
+            else:
+                self.user = self.config_info.default_user
         else:
             self.user = user
         
         if dest_dir is None:
             self.dest_dir = '/tmp'
         else:
+            if os.path.isfile(dest_dir):
+                raise ValueError(f"Destination 'directory' {dest_dir} is a file.")
+            if not os.path.exists(dest_dir):
+                os.mkdir(dest_dir, mode=0o740)
+            elif not os.access(dest_dir, os.W_OK):
+                raise ValueError(f"Directory '{dest_dir}' is not writeable.")
+            
             self.dest_dir = dest_dir
             
         if copy_format in ['csv', 'sql']:
@@ -120,11 +105,17 @@ class AuxTableCopier(object):
         self.overwrite_existing = overwrite_existing
         
         if host is None:
-            self.host = AuxTableCopier.host
+            if self.unittests:
+                self.host = self.config_info.test_default_host
+            else:
+                self.host = self.config_info.default_host
         else:
             self.host = host
             
-        self.src_db = AuxTableCopier.canvas_db_aux
+        if self.unittests:
+            self.src_db = unittest_db_name
+        else:
+            self.src_db = self.config_info.canvas_db_aux
 
         # Find the mysql executable. Normally not a problem,
         # but if running in Eclipse for debugging, the executable
@@ -148,15 +139,12 @@ class AuxTableCopier(object):
 
         if unittests:
             
-            # In case the connect_to_src_db() call
-            # below fails, ensure that self.db isn't
-            # None in the 'finally' clause:
-            
-            self.connect_to_src_db(self.user, 
-                                       self.host, 
-                                       self.pwd, 
-                                       self.src_db)
-            
+            self.db = self.utils.log_into_mysql(self.user, 
+                                                self.pwd, 
+                                                db=self.src_db, 
+                                                host=self.host
+                                                )
+
             # Don't do anything further. Allow unittests
             # to call methods in isolation.
             return
@@ -202,49 +190,59 @@ class AuxTableCopier(object):
         
     def copy_tables(self, table_names=None, overwrite_existing=None):
         
-        if table_names is None:
-            table_names = self.tables
+        try:
+            if table_names is None:
+                table_names = self.tables
+                
+            if overwrite_existing is None:
+                overwrite_existing = self.overwrite_existing
+                
+            if overwrite_existing:
+                self.log_info(f"NOTE: will overwrite aux table-related files in {self.dest_dir}.")
+            else:
+                self.log_info(f"NOTE: only copying tables not already in {self.dest_dir}. Use --all to replace all.")
+                
+            existing_tables = self.get_existing_tables_in_dir(table_names)
             
-        if overwrite_existing is None:
-            overwrite_existing = self.overwrite_existing
-            
-        if overwrite_existing:
-            self.log_info(f"NOTE: will overwrite aux table-related files in {self.dest_dir}.")
-        else:
-            self.log_info(f"NOTE: only copying tables not already in {self.dest_dir}. Use --all to replace all.")
-            
-        existing_tables = self.get_existing_tables_in_dir(table_names)
-        
-        # Delete existing files, if requested to do so:
-        if overwrite_existing:
-            for table_name in existing_tables:
-                table_file = self.file_nm_from_tble(table_name)
-                os.remove(table_file)
-            
-            # Ready to copy all:
-            tables_to_copy = set(table_names)
-        else:
-            tables_to_copy = set(table_names) - existing_tables
-        self.log_info(f'Will copy {len(tables_to_copy)} table(s).') 
-            
-        table_to_file_map = {table_name : self.file_nm_from_tble(table_name) for table_name in tables_to_copy}
-        
-        if self.copy_format == 'csv':
-            copy_result = self.copy_to_csv_files(table_to_file_map)
-        else:
-            copy_result = self.copy_to_sql_files(table_to_file_map)
+            # Delete existing files, if requested to do so:
+            if overwrite_existing:
+                for table_name in existing_tables:
+                    table_file = self.file_nm_from_tble(table_name)
+                    os.remove(table_file)
+                
+                # Ready to copy all:
+                tables_to_copy = set(table_names)
+            else:
+                tables_to_copy = set(table_names) - existing_tables
+            self.log_info(f'Will copy {len(tables_to_copy)} table(s).') 
+                
+            table_to_file_map = {table_name : self.file_nm_from_tble(table_name) for table_name in tables_to_copy}
 
-        if copy_result.errors is not None:
-            for (table_name, err_msg) in copy_result.errors.items():
-                self.log_err(f"Error copying table {table_name}: {err_msg}") 
-            
-        if overwrite_existing:
-            self.log_info(f"Copied all {len(copy_result.completed_tables)} tables to $HOME/CanvasTableCopies. Done.")
-        else:
-            self.log_info(f"Copied {len(copy_result.completed_tables)} of all " +
-                          f"{len(self.tables)} tables to $HOME/CanvasTableCopies. Done")
-            
-        return copy_result
+            self.db = self.utils.log_into_mysql(self.user, 
+                                                self.pwd, 
+                                                db=self.src_db, 
+                                                host=self.host
+                                                )
+
+            if self.copy_format == 'csv':
+                copy_result = self.copy_to_csv_files(table_to_file_map)
+            else:
+                copy_result = self.copy_to_sql_files(table_to_file_map)
+    
+            if copy_result.errors is not None:
+                for (table_name, err_msg) in copy_result.errors.items():
+                    self.log_err(f"Error copying table {table_name}: {err_msg}") 
+                
+            if overwrite_existing:
+                self.log_info(f"Copied all {len(copy_result.completed_tables)} tables to $HOME/CanvasTableCopies. Done.")
+            else:
+                self.log_info(f"Copied {len(copy_result.completed_tables)} of all " +
+                              f"{len(self.tables)} tables to $HOME/CanvasTableCopies. Done")
+                
+            return copy_result
+        finally:
+            if self.db is not None:
+                self.db.close()
 
     #------------------------------------
     # copy_to_sql_files 
@@ -311,26 +309,21 @@ class AuxTableCopier(object):
         @rtype CopyResult
         '''
         
-        try:
-    
-            # Have to get schema for each table to make
-            # the CSV header.
+        # Have to get schema for each table to make
+        # the CSV header.
+        
+        table_schemas = [self.populate_table_schema(table_name) for table_name in table_names]
+        for table_schema in table_schemas:
+            table_name = table_schema.table_name
             
-            table_schemas = [self.populate_table_schema(table_name) for table_name in table_names]
-            for table_schema in table_schemas:
-                table_name = table_schema.table_name
-                
-                self.log_info(f"Copying {table_name} to {self.dest_dir}/{table_name}.csv...")
-                self.copy_one_table_to_csv(table_schema)
-                self.log_info(f"Done copying {table_schema.table_name}.")
+            self.log_info(f"Copying {table_name} to {self.dest_dir}/{table_name}.csv...")
+            self.copy_one_table_to_csv(table_schema)
+            self.log_info(f"Done copying {table_schema.table_name}.")
 
-                self.log_info(f"Writing {table_name}'s schema to {self.dest_dir}/{table_name}_schema.sql")
-                self.write_table_schema(table_schema)
-                self.log_info(f"Done writing {table_name}'s schema to {self.dest_dir}/{table_name}_schema.sql")
-                
-        finally:
-            if self.db is not None:
-                self.db.close()
+            self.log_info(f"Writing {table_name}'s schema to {self.dest_dir}/{table_name}_schema.sql")
+            self.write_table_schema(table_schema)
+            self.log_info(f"Done writing {table_name}'s schema to {self.dest_dir}/{table_name}_schema.sql")
+
         return CopyResult(table_names, None) # No errors reported so far.
 
     #-------------------------
@@ -390,7 +383,7 @@ class AuxTableCopier(object):
         if len(field_list) == 0:
             raise TableError((table_name,None),
                              f"Table {table_schema.table_name} has no metadata " +
-                             f"(likely does not exist in db {AuxTableCopier.canvas_db_aux}).")
+                             f"(likely does not exist in db {self.config_info.canvas_db_aux}).")
         mysql_cmd = f'''SELECT {', '.join(field_list)}
                           FROM {table_name};
                      '''
@@ -427,7 +420,6 @@ class AuxTableCopier(object):
         table whose name is passed in.
         
         Assumption: self.db holds a MySQLDB instance.
-        I.e. connect_to_src_db() has been called.
         
         @param table_name: aux table name whose creation SQL is to be produced
         @type table_name: str
@@ -437,83 +429,44 @@ class AuxTableCopier(object):
         '''
         table_metadata_cmd = f'''SELECT column_name, data_type, character_maximum_length, column_default, ordinal_position, extra 
                                    FROM information_schema.COLUMNS 
-                                  WHERE table_schema = '{AuxTableCopier.canvas_db_aux}' 
+                                  WHERE table_schema = '{self.src_db}' 
                                     AND table_name = '{table_name}';
                             '''
         schema_obj = Schema(table_name)
         
-        if self.db is None or not self.db.isOpen():
-            self.connect_to_src_db(self.user, 
-                                   self.host, 
-                                   self.pwd, 
-                                   self.src_db)
+        table_metadata = self.db.query(table_metadata_cmd)
+        for (col_name, col_type, col_max_len, col_default, position, is_auto_increment) in table_metadata:
+            # Add info about one column to this schema:
+            schema_obj.push(col_name, 
+                            col_type,
+                            col_max_len, 
+                            col_default, 
+                            position, 
+                            col_is_auto_increment=(True if is_auto_increment.lower()=='auto_increment' else False))
+    
+        # For each column (i.e. SchemaColumn instance): if the col has 
+        # an index, create SchemaIndex that defines the schema, and add 
+        # it as the 'index' property to the SchemaColumn.
+        # The 'sub_part' column is an the length of the index.
+        # The data types 'text' and 'blob' require specifying a
+        # length if an index is built on them.
         
-        try:
-            table_metadata = self.db.query(table_metadata_cmd)
-            for (col_name, col_type, col_max_len, col_default, position, is_auto_increment) in table_metadata:
-                # Add info about one column to this schema:
-                schema_obj.push(col_name, 
-                                col_type,
-                                col_max_len, 
-                                col_default, 
-                                position, 
-                                col_is_auto_increment=(True if is_auto_increment.lower()=='auto_increment' else False))
+        index_metadata_cmd = f'''SELECT index_name, column_name, seq_in_index, sub_part
+                                   FROM information_schema.statistics
+                                  WHERE TABLE_SCHEMA = '{self.src_db}'
+                                    AND TABLE_NAME   = '{table_name}';  
+                              '''
+        idx_info = self.db.query(index_metadata_cmd)
         
-            # For each column (i.e. SchemaColumn instance): if the col has 
-            # an index, create SchemaIndex that defines the schema, and add 
-            # it as the 'index' property to the SchemaColumn.
-            # The 'sub_part' column is an the length of the index.
-            # The data types 'text' and 'blob' require specifying a
-            # length if an index is built on them.
+        for (index_name, col_name, seq_in_index, index_length) in idx_info:
             
-            index_metadata_cmd = f'''SELECT index_name, column_name, seq_in_index, sub_part
-                                       FROM information_schema.statistics
-                                      WHERE TABLE_SCHEMA = '{AuxTableCopier.canvas_db_aux}'
-                                        AND TABLE_NAME   = '{table_name}';  
-                                  '''
-            idx_info = self.db.query(index_metadata_cmd)
+            schema_col_obj = schema_obj[col_name]
+            schema_idx_obj = SchemaIndex(index_name, col_name, seq_in_index, index_length)
+            schema_col_obj.index = schema_idx_obj
             
-            for (index_name, col_name, seq_in_index, index_length) in idx_info:
-                
-                schema_col_obj = schema_obj[col_name]
-                schema_idx_obj = SchemaIndex(index_name, col_name, seq_in_index, index_length)
-                schema_col_obj.index = schema_idx_obj
-                
-            self.__schema = schema_obj
-        finally:
-            self.close_db()
+        self.__schema = schema_obj
             
         return schema_obj
-    
-    #------------------------------------
-    # connect_to_src_db 
-    #-------------------
-    
-    def connect_to_src_db(self, user=None, host=None, pwd=None, src_db=None):
-    
-        if user is None:
-            user = self.user
-
-        if host is None:
-            host = self.host
-
-        if pwd is None:
-            pwd = self.utils.get_db_pwd(host, self.unittests)    
-        self.log_info(f'Connecting to db {user}@{host}:{src_db}...')
-                       
-        if src_db is None:
-            src_db = self.src_db
-            
-        try:
-            # Try logging in, specifying the database in which all the tables
-            # to be copied reside: 
-            self.db = MySQLDB(user=user, passwd=pwd, db=src_db, host=host)
-        except Exception as e:
-            raise RuntimeError("Cannot open Canvas database: %s" % repr(e))
-        
-        self.log_info('Done connecting to db.')
-        
-        return self.db
     
     #-------------------------
     # close_db 
@@ -1034,24 +987,29 @@ class SchemaIndex(object):
 
 # --------------------------- Main ------------------        
 if __name__ == '__main__':
-    
+
+    config_info = ConfigInfo()
+        
     parser = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),
                                      formatter_class=argparse.RawTextHelpFormatter,
                                      description="Copy one of more auxiliary tables from AWS production to /tmp/<TableName>.csv"
                                      )
 
     parser.add_argument('-u', '--user',
-                        help=f'user name for logging into the canvas database.',
-                        default=AuxTableCopier.default_user)
+                        help=f'user name for logging into the canvas database.\n' +
+                             f'Default: {config_info.default_user}',
+                        default=config_info.default_user)
                         
     parser.add_argument('-p', '--password',
-                        help='password for logging into the canvas database. Default: content of $HOME/.ssh/canvas_db',
+                        help='password for logging into the canvas database.\n' +
+                             f'Default: content of {config_info.canvas_pwd_file}',
                         action='store_true',
                         default=None)
                         
     parser.add_argument('-o', '--host',
-                        help='host name or ip of database.',
-                        default=f'{AuxTableCopier.host}')
+                        help='host name or ip of database.\n' +
+                            f'Default: {config_info.default_host}',
+                        default=f'{config_info.default_host}')
                         
     parser.add_argument('-d', '--destdir',
                         help='directory where tables will be deposited locally',

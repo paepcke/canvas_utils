@@ -10,8 +10,16 @@ then
     mkdir $HOME/cronlogs
 fi
 
+# Same for destination of .csv file:
+if [[ ! -e $HOME/CanvasTableCopies ]]
+then
+    mkdir $HOME/CanvasTableCopies
+fi
+
 # To the canvas_utils project root:
 cd $SCRIPT_DIR/..
+
+LOG_PATH=$HOME/cronlogs/cron_aux_refresh_$(/bin/date +%d-%m-%Y).log
 
 # Run the canvas raw data refresh into canvasdata_prd.  If that
 # succeeds, activate the proper anaconda environment; if that
@@ -21,5 +29,7 @@ cd $SCRIPT_DIR/..
 # <Karen's invocation of raw data refresh> && \
 # Go to project root dir:
 $HOME/anaconda3/bin/activate canvas_utils && \
-$HOME/anaconda3/envs/canvas_utils/bin/python src/canvas_utils/canvas_prep.py > \
-$HOME/cronlogs/cron_aux_refresh_$(/bin/date +%d-%m-%Y).log 2>&1
+    $HOME/anaconda3/envs/canvas_utils/bin/python src/canvas_utils/canvas_prep.py > $LOG_PATH 2>&1 && \
+    src/canvas_utils/copy_aux_tables.py --destdir ${HOME}/CanvasTableCopies >> $LOG_PATH 2>&1
+
+    
