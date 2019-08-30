@@ -28,6 +28,7 @@ LOG_PATH=$HOME/cronlogs/cron_aux_refresh_$(/bin/date +%d-%m-%Y).log
 cd $SCRIPT_DIR/.. && \
 $HOME/anaconda3/bin/activate canvas_utils && \
     $HOME/anaconda3/envs/canvas_utils/bin/python src/canvas_utils/canvas_prep.py > $LOG_PATH 2>&1 && \
-    src/canvas_utils/copy_aux_tables.py --destdir ${HOME}/CanvasTableCopies >> $LOG_PATH 2>&1
+    $HOME/anaconda3/envs/canvas_utils/bin/python src/canvas_utils/copy_aux_tables.py \
+                                                 --destdir ${HOME}/CanvasTableCopies >> $LOG_PATH 2>&1
 
     
