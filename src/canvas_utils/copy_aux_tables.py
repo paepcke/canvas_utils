@@ -446,6 +446,10 @@ class AuxTableCopier(object):
         @rtype: Schema
         @raise RuntimeError: when MySQL database cannot be contacted. 
         '''
+        # Ensure that the information schema is updated
+        # for table table_name:
+        self.db.execute(f'ANALYZE TABLE {table_name}')
+        
         table_metadata_cmd = f'''SELECT column_name, data_type, character_maximum_length, column_default, ordinal_position, extra 
                                    FROM information_schema.COLUMNS 
                                   WHERE table_schema = '{self.src_db}' 
