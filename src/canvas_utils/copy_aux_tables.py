@@ -402,7 +402,7 @@ class AuxTableCopier(object):
                           FROM {table_name};
                      '''
         shell_script = os.path.join(os.path.dirname(__file__), 'call_mysql.sh')
-        pwd_encrypted = self.cipher.encrypt(bytes(self.pwd,  encoding='utf-8'))
+        pwd_encrypted = self.cipher.encrypt(self.pwd.encode('utf-8'))
         retrieve_stmt_arr =[shell_script,
                             self.host,
                             self.user, 
