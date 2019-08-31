@@ -12,11 +12,13 @@ import logging
 import os
 from subprocess import PIPE
 import subprocess
+from cryptography.fernet import Fernet
 import sys
 
 from query_sorter import TableError
 from utilities import Utilities
 from config_info import ConfigInfo
+from canvas_utils_exceptions import DatabaseError
 
 class AuxTableCopier(object):
     '''
@@ -116,6 +118,14 @@ class AuxTableCopier(object):
             self.src_db = unittest_db_name
         else:
             self.src_db = self.config_info.canvas_db_aux
+
+        # This ciphyer is just used to pass the mysql
+        # pwd down into the call_mysql.sh script. That's
+        # to avoid having 'ps -ef' show the call with the
+        # password. The cipher is shared with the call_mysql.sh
+        # script:
+        cipher_key  = b'0pWdfacGWmnlZqNCGfMF2gD6vmI4UmhZDVBAcIkr9mU='
+        self.cipher = Fernet(cipher_key) 
 
         # Find the mysql executable. Normally not a problem,
         # but if running in Eclipse for debugging, the executable
@@ -317,7 +327,11 @@ class AuxTableCopier(object):
             table_name = table_schema.table_name
             
             self.log_info(f"Copying {table_name} to {self.dest_dir}/{table_name}.csv...")
-            self.copy_one_table_to_csv(table_schema)
+            try:
+                self.copy_one_table_to_csv(table_schema)
+            except DatabaseError as e:
+                self.utils.log_err(f"Error exporting {table_name}: {e.message}.")
+                continue
             self.log_info(f"Done copying {table_schema.table_name}.")
 
             self.log_info(f"Writing {table_name}'s schema to {self.dest_dir}/{table_name}_schema.sql")
@@ -388,19 +402,24 @@ class AuxTableCopier(object):
                           FROM {table_name};
                      '''
         shell_script = os.path.join(os.path.dirname(__file__), 'call_mysql.sh')
+        pwd_encrypted = self.cipher.encrypt(bytes(self.pwd,  encoding='utf-8'))
         retrieve_stmt_arr =[shell_script,
                             self.host,
                             self.user, 
-                            self.pwd, 
+                            pwd_encrypted, 
                             self.src_db,
                             self.mysql_path,
                             tmp_file_name,
                             mysql_cmd
                             ] 
+        
         _completed_process = subprocess.run(retrieve_stmt_arr, 
                                             #capture_output=True, # Only for debugging 
                                             shell=False)
 
+        if _completed_process.returncode != 0:
+            raise DatabaseError(f"Call to MySQL '{mysql_cmd[:20]}...' failed")
+            
         with open(out_file_name, 'w') as out_fd:
             with open(tmp_file_name, 'r', encoding='ISO-8859-1') as in_fd:
                 tsv_reader = csv.reader(in_fd, delimiter='\t', quoting=csv.QUOTE_ALL)

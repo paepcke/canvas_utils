@@ -15,11 +15,18 @@
 
 HOST=$1
 USER=$2
-PWD=$3
+ENCRYPTED_PWD=$3
 SRC_DB=$4
 MYSQL_PATH=$5
 OUTFILE=$6
 SELECT_STATEMENT=$7
+
+# This cipher_key is shared with copy_aux_tables.py. It
+# is only used to avoid having the MySQL pwd appear in
+# 'ps -ef', not to otherwise keep it secret:
+
+cipher_key="b'0pWdfacGWmnlZqNCGfMF2gD6vmI4UmhZDVBAcIkr9mU='"
+PWD=$(python -c "import sys; from cryptography.fernet import Fernet; cipher=Fernet($cipher_key); print(cipher.decrypt('$ENCRYPTED_PWD'))")
 
 # echo "User: $USER"
 # echo "Pwd:  $PWD"
@@ -27,12 +34,24 @@ SELECT_STATEMENT=$7
 # echo "MySQL Path: ${MYSQL_PATH}"
 # echo "Mysql:$SELECT_STATEMENT"
 
+# The funky --defaults-extra-file creates an on-the-fly
+# MySQL option 'file' where MySQL goes to look for the
+# host/user/pwd. In a real option file MySQL would see:
+
+#    [client]
+#    host = myhost
+#    user = myuser
+#    password = mypasswor
+
 if [[ -z $PWD ]]
 then   
     ${MYSQL_PATH} -h $HOST -u $USER $SRC_DB -e " ${SELECT_STATEMENT}" > $OUTFILE
     exit $?
 else
-    ${MYSQL_PATH} -h $HOST -u $USER -p$PWD $SRC_DB -e " ${SELECT_STATEMENT}" > $OUTFILE
+    #${MYSQL_PATH} -h $HOST -u $USER -p$PWD $SRC_DB -e " ${SELECT_STATEMENT}" > $OUTFILE
+
+    ${MYSQL_PATH} --defaults-extra-file=<(printf "[client]\nhost = %s\nuser = %s\npassword = %s" "$HOST, $USER" "$PWD")\
+                  $SRC_DB -e " ${SELECT_STATEMENT}" > $OUTFILE
     exit $?
 fi
 

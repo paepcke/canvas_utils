@@ -19,6 +19,7 @@ setup(
                         'pymysql_utils>=2.1.5',
                         'nltk>=3.4',
                         'requests>=2.21.0',
+                        'cryptography>=2.7',
                         ],
 
     #dependency_links = ['https://github.com/DmitryUlyanov/Multicore-TSNE/tarball/master#egg=package-1.0']
