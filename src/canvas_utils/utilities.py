@@ -648,7 +648,8 @@ class Utilities(object):
         self.handler.setLevel(loggingLevel)
 
         # Create formatter
-        formatter = logging.Formatter("%(name)s: %(asctime)s;%(levelname)s: %(message)s")
+        #formatter = logging.Formatter("%(name)s: %(asctime)s;%(levelname)s: %(message)s")
+        formatter = logging.Formatter("%(asctime)s;%(levelname)s: %(message)s")
         self.handler.setFormatter(formatter)
 
         # Add the handler to the logger
@@ -678,5 +679,5 @@ class Utilities(object):
         self.logger.info(msg)
 
     def log_err(self, msg):
-        self.logger.error(msg)
+        self.logger.error('*****' + msg)
         
