@@ -12,7 +12,6 @@ import logging
 import os
 from subprocess import PIPE
 import subprocess
-from cryptography.fernet import Fernet
 import sys
 
 from query_sorter import TableError
@@ -118,14 +117,6 @@ class AuxTableCopier(object):
             self.src_db = unittest_db_name
         else:
             self.src_db = self.config_info.canvas_db_aux
-
-        # This ciphyer is just used to pass the mysql
-        # pwd down into the call_mysql.sh script. That's
-        # to avoid having 'ps -ef' show the call with the
-        # password. The cipher is shared with the call_mysql.sh
-        # script:
-        cipher_key  = b'0pWdfacGWmnlZqNCGfMF2gD6vmI4UmhZDVBAcIkr9mU='
-        self.cipher = Fernet(cipher_key) 
 
         # Find the mysql executable. Normally not a problem,
         # but if running in Eclipse for debugging, the executable
@@ -402,11 +393,16 @@ class AuxTableCopier(object):
                           FROM {table_name};
                      '''
         shell_script = os.path.join(os.path.dirname(__file__), 'call_mysql.sh')
-        pwd_encrypted = self.cipher.encrypt(self.pwd.encode('utf-8'))
+        
+        # Tell shell script where to find the MySQL pwd:
+#         if self.unittests and self.host == 'localhost':
+#             pass
+        pwd_file_pointer = self.config_info.canvas_pwd_file
+
         retrieve_stmt_arr =[shell_script,
                             self.host,
                             self.user, 
-                            pwd_encrypted, 
+                            pwd_file_pointer, 
                             self.src_db,
                             self.mysql_path,
                             tmp_file_name,
