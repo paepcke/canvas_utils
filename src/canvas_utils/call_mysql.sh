@@ -19,14 +19,22 @@ MYSQL_PATH=$5
 OUTFILE=$6
 SELECT_STATEMENT=$7
 
+# Is pwd file pointer absolute?
+if [[ ! $PWD_FILE_POINTER == /* ]]
+then
+    # Nope, make it so:
+    PWD_FILE_POINTER=${HOME}/.ssh/${PWD_FILE_POINTER}
+fi
+
 PWD=$(<${PWD_FILE_POINTER})
 
  # echo "Host: $HOST"
- # echo "User: $USER"
- # echo "Pwd:  $PWD"
- # echo "Db:   $SRC_DB"
- # echo "MySQL Path: ${MYSQL_PATH}"
- # echo "Mysql:$SELECT_STATEMENT"
+# echo "User: $USER"
+# echo "Pwd file ptr: $PWD_FILE_POINTER"
+# echo "Pwd:  $PWD"
+# echo "Db:   $SRC_DB"
+# echo "MySQL Path: ${MYSQL_PATH}"
+# echo "Mysql:$SELECT_STATEMENT"
 
 # The funky --defaults-extra-file creates an on-the-fly
 # MySQL option 'file' where MySQL goes to look for the
