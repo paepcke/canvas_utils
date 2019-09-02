@@ -15,7 +15,6 @@ import re
 import shutil
 import stat
 import subprocess
-from cryptography.fernet import Fernet
 import sys
 
 from canvas_utils_exceptions import DatabaseError, ExploreCoursesError
@@ -187,19 +186,13 @@ class CanvasPrep(object):
         self.target_db = target_db
         self.excludes = excludes
             
+        self.pwd_file_pointer = config_info.canvas_pwd_file
+            
         self.utils.setup_logging(logging_level)
         self.log_info = self.utils.log_info
         self.log_warn = self.utils.log_warn
         self.log_err  = self.utils.log_err
 
-        # This ciphyer is just used to pass the mysql
-        # pwd down into the call_mysql.sh script. That's
-        # to avoid having 'ps -ef' show the call with the
-        # password. The cipher is shared with the call_mysql.sh
-        # script:
-        cipher_key  = b'0pWdfacGWmnlZqNCGfMF2gD6vmI4UmhZDVBAcIkr9mU='
-        self.cipher = Fernet(cipher_key) 
-        
         # If user wants only particular tables to be created
         # then the tables arg will be a list of table names.
         # Get a list of true tables represented in Queries:
@@ -712,14 +705,12 @@ class CanvasPrep(object):
         # Location of call_mysql.sh script:
         shell_script = os.path.join(os.path.dirname(__file__), 'call_mysql.sh')
         
-        pwd_encrypted = self.cipher.encrypt(self.pwd.encode('utf-8'))
-        
         # Get full path to mysql command:
         mysql_path = self.utils.get_mysql_path()
         src_load_stmt_arr =[shell_script,
                             self.host,
                             self.user, 
-                            pwd_encrypted, 
+                            self.pwd_file_pointer,
                             self.target_db,
                             mysql_path,
                             '/dev/null',
