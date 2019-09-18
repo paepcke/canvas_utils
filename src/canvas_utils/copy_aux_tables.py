@@ -541,20 +541,25 @@ class AuxTableCopier(object):
         
         with open(dst_file_name, 'a' if append else 'w') as out_fd:
             with open(src_file_name, 'r', encoding='ISO-8859-1') as in_fd:
-                tsv_reader = csv.reader(in_fd, delimiter='\t', quoting=csv.QUOTE_ALL)
+                #*****tsv_reader = csv.reader(in_fd, 
+                #*****                        delimiter='\t'
+                #*****                        )
                 csv_writer = csv.writer(out_fd,
                                         delimiter=',',
                                         quoting=csv.QUOTE_ALL,
                                         escapechar='\\',
-                                        doublequote=False
+                                        doublequote=False,
+                                        quotechar='"',
                                         )
                 
                 if append:
                     # Throw away the column header: 
-                    next(tsv_reader)
-                for line in tsv_reader:
+                    #*****next(tsv_reader)
+                    next(in_fd)
+                for line in in_fd:
+                    split_line = line.strip().split('\t')
                     # Write to dest as csv:
-                    csv_writer.writerow(line)        
+                    csv_writer.writerow(split_line)
         
     #-------------------------
     # populate_table_schema 
