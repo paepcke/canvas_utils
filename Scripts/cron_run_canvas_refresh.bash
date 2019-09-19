@@ -23,6 +23,8 @@ LOG_PATH=$HOME/cronlogs/cron_aux_refresh_$(/bin/date +%d-%m-%Y).log
 # succeeds, run canvas_prep.py, creating a new log file for its
 # output:
 
+$HOME/Code/canvasdata/run/import_canvas_data.sh && \
+
 # <Karen's invocation of raw data refresh goes here> && \
 # To the canvas_utils project root:
 cd $SCRIPT_DIR/.. && \
