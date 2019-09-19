@@ -380,6 +380,57 @@ class Utilities(object):
         return table_names        
 
     #-------------------------
+    # get_assignment_submissions_account_ids 
+    #--------------
+    
+    def get_assignment_submissions_account_ids(self, db):
+        '''
+        Return a unique list of account_id values in
+        table AssignmentSubmissions. There are on the order
+        of 200. We use them to pull data from that table
+        in chunks, b/c else the MySQL server gets cranky.
+        
+        We return a list of AccountIdCollection instances. Those each
+        hold a list of account ids that can be retrieved together,
+        because each account does not have toooo many AssignmentSubmission
+        entries.
+    
+        @param db: fully initialized db instance
+        @type db: pysmysql_utils.MySQLDB
+        @return: list of AccountId instances
+        @rtype: [AccountIdCollection]
+        '''
+        account_id_res = db.query(f'''
+   									SELECT account_id, COUNT(*) AS num_entries
+    								FROM AssignmentSubmissions
+    								GROUP BY account_id
+    								ORDER BY num_entries DESC;        
+                                    '''
+                                )
+        # Get list of (account_id, num_entries) tuples,
+        # ordered descending by num_entries:
+        account_id_volumes = [account_vol for account_vol in account_id_res]
+        
+        # Create one-element account_ids for any
+        # account number with >= 100 entries: 
+        account_objs = []
+        for i in range(len(account_id_volumes)):
+            (account_id, volume) = account_id_volumes[i]
+            if volume >= 1000:
+                account_objs.append(AccountIdCollection([account_id], volume))
+            else:
+                # Combine all remaining account ids into one list:
+                id_collection  = []
+                total_num_rows = 0
+                for j in range(i,len(account_id_volumes)):
+                    (account_id, volume) = account_id_volumes[j] 
+                    id_collection.append(account_id)
+                    total_num_rows += volume
+                account_objs.append(AccountIdCollection(id_collection, total_num_rows))
+                break
+        return account_objs
+            
+    #-------------------------
     # ensure_load_log_table_existence 
     #--------------
 
@@ -681,3 +732,48 @@ class Utilities(object):
     def log_err(self, msg):
         self.logger.error('*****' + msg)
         
+        
+    # -------------------------------- AccountIdCollection Class ----------
+    
+class AccountIdCollection(object):
+    
+    #-------------------------
+    # Constructor 
+    #--------------
+    
+    def __init__(self, account_ids, num_rows):
+        '''
+        Receive a list of account_id numbers
+        Used to pull AssignmentSubmissions rows in pieces that
+        won't kill the MySQL server connection.
+
+        We store the list, and make it accessible via
+        the account_ids property
+        
+        @param account_ids: list of AssignmentSubmissions account ids
+        @type account_ids: [int]
+        @param num_rows: total number of rows with any of the 
+            given account_ids
+        @type num_rows: int
+        '''
+        
+        self._account_ids = account_ids
+        self._num_rows    = num_rows
+
+    #-------------------------
+    # account_ids property 
+    #--------------
+        
+    @property
+    def account_ids(self):
+        return self._account_ids
+    
+    #-------------------------
+    # num_rows property 
+    #--------------
+    
+    @property
+    def num_rows(self):
+        return self._num_rows
+    
+    

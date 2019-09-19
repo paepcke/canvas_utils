@@ -137,7 +137,7 @@ class AuxTableCopier(object):
             db_pwd = self.utils.get_db_pwd(host, ask_user= True, unittests=unittests)
 
         self.pwd = db_pwd
-
+        
         if unittests:
             
             self.db = self.utils.log_into_mysql(self.user, 
@@ -235,10 +235,10 @@ class AuxTableCopier(object):
                     self.log_err(f"Error copying table {table_name}: {err_msg}") 
                 
             if overwrite_existing:
-                self.log_info(f"Copied all {len(copy_result.completed_tables)} tables to $HOME/CanvasTableCopies. Done.")
+                self.log_info(f"Copied all {len(copy_result.completed_tables)} tables to {self.dest_dir}. Done.")
             else:
                 self.log_info(f"Copied {len(copy_result.completed_tables)} of all " +
-                              f"{len(self.tables)} tables to $HOME/CanvasTableCopies. Done")
+                              f"{len(self.tables)} tables to {self.dest_dir}. Done")
                 
             return copy_result
         finally:
@@ -306,7 +306,7 @@ class AuxTableCopier(object):
         
         @param table_names: names of tables whose contents to pull into dest_dir
         @type table_names: [str]
-        @return: a CopyResult instance with tables copied, and errors encounetered.
+        @return: a CopyResult instance with tables copied, and errors encountered.
         @rtype CopyResult
         '''
         
@@ -314,6 +314,7 @@ class AuxTableCopier(object):
         # the CSV header.
         
         table_schemas = [self.populate_table_schema(table_name) for table_name in table_names]
+        copy_result = CopyResult()
         for table_schema in table_schemas:
             table_name = table_schema.table_name
             
@@ -321,15 +322,19 @@ class AuxTableCopier(object):
             try:
                 self.copy_one_table_to_csv(table_schema)
             except DatabaseError as e:
-                self.utils.log_err(f"Error exporting {table_name}: {e.message}.")
+                # Rather than reporting each error spread out
+                # across the log, report them all in the caller:
+                # self.utils.log_err(f"Error exporting {table_name}: {e.message}.")
+                copy_result.add_error(table_name, e)
                 continue
             self.log_info(f"Done copying {table_schema.table_name}.")
+            copy_result.add_completed_table(table_schema.table_name)
 
             self.log_info(f"Writing {table_name}'s schema to {self.dest_dir}/{table_name}_schema.sql")
             self.write_table_schema(table_schema)
             self.log_info(f"Done writing {table_name}'s schema to {self.dest_dir}/{table_name}_schema.sql")
 
-        return CopyResult(table_names, None) # No errors reported so far.
+        return copy_result
 
     #-------------------------
     # write_table_schema 
@@ -389,9 +394,6 @@ class AuxTableCopier(object):
             raise TableError((table_name,None),
                              f"Table {table_schema.table_name} has no metadata " +
                              f"(likely does not exist in db {self.config_info.canvas_db_aux}).")
-        mysql_cmd = f'''SELECT {', '.join(field_list)}
-                          FROM {table_name};
-                     '''
         shell_script = os.path.join(os.path.dirname(__file__), 'call_mysql.sh')
         
         # Tell shell script where to find the MySQL pwd:
@@ -399,32 +401,166 @@ class AuxTableCopier(object):
 #             pass
         pwd_file_pointer = self.config_info.canvas_pwd_file
 
-        retrieve_stmt_arr =[shell_script,
-                            self.host,
-                            self.user, 
-                            pwd_file_pointer, 
-                            self.src_db,
-                            self.mysql_path,
-                            tmp_file_name,
-                            mysql_cmd
-                            ] 
+        # Ensure the destination for the tsv file does not
+        # exist at the outset:
         
-        _completed_process = subprocess.run(retrieve_stmt_arr, 
-                                            #capture_output=True, # Only for debugging 
-                                            shell=False)
-
-        if _completed_process.returncode != 0:
-            raise DatabaseError(f"Call to MySQL '{mysql_cmd[:20]}...' failed")
+        if os.path.exists(tmp_file_name):
+            os.remove(tmp_file_name)
+        
+        mysql_cmd = f'''SELECT {', '.join(field_list)}
+                          FROM {table_name};
+                     '''
             
-        with open(out_file_name, 'w') as out_fd:
-            with open(tmp_file_name, 'r', encoding='ISO-8859-1') as in_fd:
-                tsv_reader = csv.reader(in_fd, delimiter='\t', quoting=csv.QUOTE_ALL)
-                csv_writer = csv.writer(out_fd, delimiter=',', quoting=csv.QUOTE_ALL)
-                for line in tsv_reader:
+        retrieve_parms = OrderedDict({
+            'shell_script' : shell_script,
+            'host'         : self.host,
+            'user'         : self.user,
+            'pwd_file_ptr' : pwd_file_pointer,
+            'src_db'       : self.src_db,
+            'mysql_path'   : self.mysql_path,
+            'tmp_file_name': tmp_file_name,
+            'mysql_cmd'    : mysql_cmd      # Method pull_by_account_id() relies on this being last!
+            })
+        
+        
+        # Tables other than AssignmentSubmissions are small enough
+        # that they can be output to tsv in one call to MySQL. But
+        # beyond some limit of rows the MySQL server disconnects
+        # in protest, unless its configuration allows larger chunks.
+        # To leave the MySQL server's default settiungs, we chop
+        # retrieval up for AssignmentSubmissions:
+                
+        if table_name != 'AssignmentSubmissions':
+            retrieve_stmt_arr = [val for val in retrieve_parms.values()]
+            _completed_process = subprocess.run(retrieve_stmt_arr, 
+                                                #capture_output=True, # Only for debugging 
+                                                shell=False)
+    
+            if _completed_process.returncode != 0:
+                raise DatabaseError(f"Call to MySQL '{mysql_cmd[:20]}...' failed")
+            
+            # Copy finished .tsv to final .csv:
+            self.cp_tsv_to_csv(retrieve_parms['tmp_file_name'], out_file_name, append=False)
+
+        else:
+            # Get account numbers, and pull just rows of
+            # one account number at a time. Accumulate into the temp file,
+            # then transfer to the final .csv:
+            self.pull_by_account_id(retrieve_parms, table_name, field_list, out_file_name)
+
+    #-------------------------
+    # pull_by_account_id
+    #--------------
+
+    def pull_by_account_id(self, retrieve_parms, table_name, field_list, out_file_name):
+        '''
+        For the very large AssignmentSubmissions table we
+        need to pull rows in batches if mysql server is left
+        at default config values. Find those chunks, pull them
+        into a temp .tsv file, and transfer them to the final .csv file
+        piece by piece. 
+        
+        @param retrieve_parms: ordered dict of parameters to pass to the 
+            call_mysql.sh script
+        @type retrieve_parms: {str : <any>}
+        @param table_name: name of table to pull from
+        @type table_name: str
+        @param field_list: list of column names to retrieve in proper order
+        @type field_list: [str]
+        @param out_file_name: path to the .csv file where the data is to land
+        @type out_file_name: str
+        '''
+        
+        # Get list of AccountIdCollection instances. Each
+        # will have a list of account numbers whose rows
+        # we are to get:
+        
+        self.log_info(f"Getting list of account_ids for table {table_name}...")
+        account_id_seq_objs = self.utils.get_assignment_submissions_account_ids(self.db)
+        self.log_info(f"Found {len(account_id_seq_objs)} distinct account_ids in {table_name}")
+        
+        col_names = ','.join(field_list)
+        
+        # For each seq of account_id, pull the corresponding
+        # rows, and put them into a .tsv tmp file. So, for
+        # accounts with lots of rows, we'll pull just rows for
+        # that account. For accounts with smaller number or rows,
+        # we pull all the rows from a few account_ids together.
+
+        col_header_written = False
+        for account_id_seq_obj in account_id_seq_objs:
+            range_str = ','.join([str(account_id) for account_id in account_id_seq_obj.account_ids])
+            mysql_cmd = f'''
+                          SELECT {col_names}
+                            FROM {table_name}
+                        WHERE account_id IN ({range_str});  
+                          '''
+            retrieve_parms['mysql_cmd'] = mysql_cmd
+            retrieve_stmt_arr = retrieve_stmt_arr = [val for val in retrieve_parms.values()]
+            _completed_process = subprocess.run(retrieve_stmt_arr, 
+                                                #capture_output=True, # Only for debugging 
+                                                shell=False)
+    
+            if _completed_process.returncode != 0:
+                raise DatabaseError(f"Call to MySQL '{mysql_cmd[:20]}...' failed")
+
+
+            # If this is the first batch, we include 
+            # the column header:
+            appending = True if col_header_written else False
+            
+            self.cp_tsv_to_csv(retrieve_parms['tmp_file_name'], 
+                               out_file_name,
+                               append=appending
+                               )
+            col_header_written = True
+            
+            self.log_info(f"Pulled {account_id_seq_obj.num_rows} rows from table {table_name}")
+            
+    #-------------------------
+    # cp_tsv_to_csv 
+    #--------------
+    
+    def cp_tsv_to_csv(self, src_file_name, dst_file_name, append=False):
+        '''
+        Copy file from source to destination. The source file
+        is expected to have a header line with the column names. 
+        If append is False, then the destination file is wiped 
+        before copy, and the header line is copied over.
+        
+        If append is False, the header line is not copied, and 
+        the file is appended. 
+        
+        @param src_file_name: full path to source file
+        @type src_file_name: str
+        @param dst_file_name: full path to destination file
+        @type dst_file_name: str
+        @param append: whether or not to append to destination
+        @type append: bool
+        '''
+        
+        with open(dst_file_name, 'a' if append else 'w') as out_fd:
+            with open(src_file_name, 'r', encoding='ISO-8859-1') as in_fd:
+                #*****tsv_reader = csv.reader(in_fd, 
+                #*****                        delimiter='\t'
+                #*****                        )
+                csv_writer = csv.writer(out_fd,
+                                        delimiter=',',
+                                        quoting=csv.QUOTE_ALL,
+                                        escapechar='\\',
+                                        doublequote=False,
+                                        quotechar='"',
+                                        )
+                
+                if append:
+                    # Throw away the column header: 
+                    #*****next(tsv_reader)
+                    next(in_fd)
+                for line in in_fd:
+                    split_line = line.strip().split('\t')
                     # Write to dest as csv:
-                    csv_writer.writerow(line)        
-
-            
+                    csv_writer.writerow(split_line)
+        
     #-------------------------
     # populate_table_schema 
     #--------------
@@ -590,9 +726,74 @@ class AuxTableCopier(object):
 
 class CopyResult(object):
 
-    def __init__(self, completed_tables, errors):
-        self.completed_tables = completed_tables
-        self.errors = errors
+    #-------------------------
+    # Constructor 
+    #--------------
+
+    def __init__(self):
+        self._completed_tables = []
+        # Dict {table_name : err_msg}
+        self._errors = {}
+    
+    #-------------------------
+    # add_error 
+    #--------------
+    
+    def add_error(self, tbl_name, error_obj):
+        '''
+        Add a table-copy error to the record.
+        
+        @param tbl_name: name of table whose copying failed
+        @type tbl_name: str
+        @param error_obj: an Exception subclass instance
+        @type error_obj: Exception
+        '''
+        self._errors[tbl_name] = error_obj.message
+
+    #-------------------------
+    # add_completed_table
+    #--------------
+    
+    def add_completed_table(self, table_name):
+        '''
+        Record a completed table.
+        
+        @param table_name: name of table that was successfully copied.
+        @type table_name: str
+        '''
+        self._completed_tables.append(table_name)
+
+    #-------------------------
+    # no_errors
+    #--------------
+
+    def no_errors(self):
+        return len(self._errors) == 0
+        
+    #-------------------------
+    # error_msg_list 
+    #--------------
+    
+    @property
+    def errors(self):
+        '''
+        
+        @return: None if now errors were recorded, else dict {table_name : errorMmsg}
+        @rtype: {None | {str : str}}
+        '''
+        
+        if self.no_errors():
+            return None
+        else:
+            return self._errors
+    
+    #-------------------------
+    # completed_tables 
+    #--------------
+    
+    @property
+    def completed_tables(self):
+        return self._completed_tables
     
 # ------------------------------------------------  Class Schema -----------------------
     
