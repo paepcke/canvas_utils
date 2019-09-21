@@ -4,14 +4,18 @@ Created on Sep 12, 2019
 @author: paepcke
 '''
 import os
+import socket
 import tempfile
 import unittest
 
-from final_sanity_check import SanityChecker
 from canvas_utils_exceptions import TableExportError
+from final_sanity_check import SanityChecker
+
 
 TEST_ALL = True
 #TEST_ALL = False
+
+TEST_EMAIL = True
 
 class SanityCheckTester(unittest.TestCase):
 
@@ -31,6 +35,10 @@ class SanityCheckTester(unittest.TestCase):
         self.sanity_checker.table_export_dir_path = self.test_tmpdir_path
         self.sanity_checker.init_table_vars()
         self.all_table_names = self.sanity_checker.all_tables
+        
+        # Content to put into tables to pretend they were
+        # filled properly:
+        self.tbl_test_content = b"some content."
         
     #-------------------------
     # tearDown 
@@ -85,7 +93,7 @@ class SanityCheckTester(unittest.TestCase):
         self.assertTrue(self.sanity_checker.check_num_files())
         
         with self.assertRaises(TableExportError) as e:
-            self.sanity_checker.check_for_zero_len_exports()
+            self.sanity_checker.check_exported_file_lengths()
             self.assertEqual(len(e.table_list), len(self.all_table_names))
             
         # Same with just one zero-len:
@@ -94,8 +102,14 @@ class SanityCheckTester(unittest.TestCase):
         # Update copied-file notion in sanity_checker:
         self.sanity_checker.init_table_vars()
         
+        # But pretend that all we expect for file sizes is
+        # the length of our test content:
+        
+        reasonable_sizes_dict = self.sanity_checker.putative_file_sizes_dict
+        self.fill_pretend_reasonable_file_lengths(reasonable_sizes_dict) 
+        
         # Should give no error of zero length file:
-        self.assertTrue(self.sanity_checker.check_for_zero_len_exports())
+        self.assertTrue(self.sanity_checker.check_exported_file_lengths())
         
         # Truncate just one:
         zero_len_file_path = os.path.join(self.test_tmpdir_path, self.all_table_names[-1] + '.csv')
@@ -104,13 +118,46 @@ class SanityCheckTester(unittest.TestCase):
             pass
             
         try:
-            self.sanity_checker.check_for_zero_len_exports()
+            self.sanity_checker.check_exported_file_lengths()
             self.fail(f'Should have seen a one-table zero-len error: {os.path.basename(zero_len_file_path)}')
         except TableExportError as e:
             self.assertEqual(e.table_list, [self.all_table_names[-1]])
             
+    #-------------------------
+    # test_error_emails 
+    #--------------
+
+    @unittest.skipIf(not TEST_EMAIL, 'Skipping email test')
+    def test_error_emails(self):
+        
+        e1 = TableExportError("Testing deficiency 1", ['Tbl1', 'Tbl2'])
+        e2 = TableExportError("Testing deficiency 2", ['Tbl1', 'Tbl3'])
+        
+        this_host = socket.gethostname()
+        if this_host == self.sanity_checker.DEVMACHINE_HOSTNAME:
+            self.assertTrue(self.sanity_checker.maybe_send_mail([e1, e2]))
+        else:
+            self.assertFalse(self.sanity_checker.maybe_send_mail([e1, e2]))
+
             
     # --------------------------- Utilities ---------------        
+    
+    #-------------------------
+    # fill_pretend_reasonable_file_lengths 
+    #--------------
+    
+    def fill_pretend_reasonable_file_lengths(self, file_length_dict):
+        '''
+        The sanity checker uses a json file to remember
+        the expected file lengths of csv files. Make those
+        lengths be the length of our test copied-file content.
+        
+        @param file_length_dict: the SanityCheck instance's reasonable size dict
+        @type file_length_dict: {str : int}
+        '''
+        for tbl_name in file_length_dict.keys():
+            file_length_dict[tbl_name] = len(self.tbl_test_content)
+        
     
     #-------------------------
     #  create_copied_file
@@ -133,7 +180,7 @@ class SanityCheckTester(unittest.TestCase):
         file_path = os.path.join(self.test_tmpdir_path, table_name + ext)
         with open(file_path, 'wb') as fd:
             if not be_empty:
-                fd.write(b"some content.")
+                fd.write(self.tbl_test_content)
         
 
 

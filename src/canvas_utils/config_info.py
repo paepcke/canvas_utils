@@ -79,6 +79,9 @@ class ConfigInfo(object):
     def test_default_user(self):
         return self._test_default_user
 
+    @property
+    def admin_email_recipient(self):
+        return self._admin_email_recipient
 
     #-------------------------
     # read_config_file 
@@ -139,6 +142,12 @@ class ConfigInfo(object):
             self._canvas_pwd_file = config_parser['DATABASE']['canvas_pwd_file']
         except KeyError:
             raise ConfigurationError(f"Cannot read DATABASE:canvas_pwd_file from {setup_file_name}")
+
+        try:
+            self._admin_email_recipient = config_parser['EMAIL']['admin_email_recipient']
+        except KeyError:
+            raise ConfigurationError(f"Cannot read EMAIL:admin_email_recipient from {setup_file_name}")
+
 
 # -------------------- Testing -----------
 

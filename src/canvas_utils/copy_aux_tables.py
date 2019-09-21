@@ -8,16 +8,18 @@ from _collections import OrderedDict
 import argparse
 import collections.abc
 import csv
+import datetime
 import logging
 import os
+import sys
 from subprocess import PIPE
 import subprocess
-import sys
 
+from canvas_utils_exceptions import DatabaseError
+from config_info import ConfigInfo
 from query_sorter import TableError
 from utilities import Utilities
-from config_info import ConfigInfo
-from canvas_utils_exceptions import DatabaseError
+
 
 class AuxTableCopier(object):
     '''
@@ -26,6 +28,14 @@ class AuxTableCopier(object):
     '''
     
     file_ext = None
+    
+    # Compute year from which onward GradingProcess 
+    # records are to be exported to .csv. We use
+    # <current_year> - 4. Just change the 4 to taste.
+    # But the smaller the start year, the longer the
+    # export will take:    
+    #*****GRADING_PROCESS_START_YEAR = datetime.datetime.now().year - 1
+    GRADING_PROCESS_START_YEAR = datetime.datetime.now().year - 1
         
     #-------------------------
     # Constructor 
@@ -232,7 +242,7 @@ class AuxTableCopier(object):
     
             if copy_result.errors is not None:
                 for (table_name, err_msg) in copy_result.errors.items():
-                    self.log_err(f"Error copying table {table_name}: {err_msg}") 
+                    self.utils.log_err(f"Error copying table {table_name}: {err_msg}") 
                 
             if overwrite_existing:
                 self.log_info(f"Copied all {len(copy_result.completed_tables)} tables to {self.dest_dir}. Done.")
@@ -430,7 +440,15 @@ class AuxTableCopier(object):
         # To leave the MySQL server's default settiungs, we chop
         # retrieval up for AssignmentSubmissions:
                 
-        if table_name != 'AssignmentSubmissions':
+        if table_name == 'AssignmentSubmissions': 
+            # Get account numbers, and pull just rows of
+            # one account number at a time. Accumulate into the temp file,
+            # then transfer to the final .csv:
+            self.pull_by_account_id(retrieve_parms, table_name, field_list, out_file_name)
+        elif table_name == 'GradingProcess':
+            # Pull only the records since AuxTableCopier.GRADING_PROCESS_START_YEAR
+            self.pull_by_term_year(retrieve_parms, table_name, field_list, out_file_name)
+        else:
             retrieve_stmt_arr = [val for val in retrieve_parms.values()]
             _completed_process = subprocess.run(retrieve_stmt_arr, 
                                                 #capture_output=True, # Only for debugging 
@@ -442,11 +460,61 @@ class AuxTableCopier(object):
             # Copy finished .tsv to final .csv:
             self.cp_tsv_to_csv(retrieve_parms['tmp_file_name'], out_file_name, append=False)
 
-        else:
-            # Get account numbers, and pull just rows of
-            # one account number at a time. Accumulate into the temp file,
-            # then transfer to the final .csv:
-            self.pull_by_account_id(retrieve_parms, table_name, field_list, out_file_name)
+    #-------------------------
+    # pull_by_term_year 
+    #--------------
+
+    def pull_by_term_year(self, retrieve_parms, table_name, field_list, out_file_name):
+        '''
+        For from the very large GradingProcess table 
+        only records since AuxTableCopier.GRADING_PROCESS_START_YEAR
+        
+        @param retrieve_parms: ordered dict of parameters to pass to the 
+            call_mysql.sh script
+        @type retrieve_parms: {str : <any>}
+        @param table_name: name of table to pull from
+        @type table_name: str
+        @param field_list: list of column names to retrieve in proper order
+        @type field_list: [str]
+        @param out_file_name: path to the .csv file where the data is to land
+        @type out_file_name: str
+        '''
+        # Convenience copy:
+        start_year = AuxTableCopier.GRADING_PROCESS_START_YEAR
+        
+        # Create table with all term_id numbers since the
+        # year from which we wish to pull records. Term_name format
+        # in Terms table is 'Winter 2016'. The substring() call below
+        # extracts the year from these entries:
+        
+        self.log_info(f"Getting list of enrollment_term_id since {start_year}...")
+        term_ids = self.db.query(f'''
+								  SELECT term_id                    
+								    FROM Terms
+								   WHERE SUBSTRING_INDEX(term_name, ' ', -1) >= {start_year};        
+                                '''
+        )
+        enrollment_term_ids = [str(term_id) for term_id in term_ids]
+        enrollment_term_id_strs = ','.join(enrollment_term_ids)
+        self.log_info(f"Done getting list of enrollment_term_id since {start_year}...") 
+        
+        # Col names we want to export:
+        col_names = ','.join(field_list)
+        
+        mysql_cmd = f'''
+                      SELECT {col_names}
+                        FROM {table_name}
+                    WHERE enrollment_term_id IN ({enrollment_term_id_strs});  
+                      '''
+        
+        retrieve_parms['mysql_cmd'] = mysql_cmd
+        retrieve_stmt_arr = [val for val in retrieve_parms.values()]
+        _completed_process = subprocess.run(retrieve_stmt_arr, 
+                                            #capture_output=True, # Only for debugging 
+                                            shell=False)
+
+        if _completed_process.returncode != 0:
+            raise DatabaseError(f"Call to MySQL '{mysql_cmd[:20]}...' failed")
 
     #-------------------------
     # pull_by_account_id
@@ -538,12 +606,9 @@ class AuxTableCopier(object):
         @param append: whether or not to append to destination
         @type append: bool
         '''
-        
+        self.log_info(f"Copying tsv file {src_file_name} to csv {dst_file_name}...")
         with open(dst_file_name, 'a' if append else 'w') as out_fd:
             with open(src_file_name, 'r', encoding='ISO-8859-1') as in_fd:
-                #*****tsv_reader = csv.reader(in_fd, 
-                #*****                        delimiter='\t'
-                #*****                        )
                 csv_writer = csv.writer(out_fd,
                                         delimiter=',',
                                         quoting=csv.QUOTE_ALL,
@@ -554,13 +619,12 @@ class AuxTableCopier(object):
                 
                 if append:
                     # Throw away the column header: 
-                    #*****next(tsv_reader)
                     next(in_fd)
                 for line in in_fd:
                     split_line = line.strip().split('\t')
                     # Write to dest as csv:
                     csv_writer.writerow(split_line)
-        
+        self.log_info(f"Done copying tsv file {src_file_name} to csv {dst_file_name}.")        
     #-------------------------
     # populate_table_schema 
     #--------------
