@@ -309,7 +309,10 @@ class SanityChecker(object):
 
         content = ""        
         for err in error_list:
-            content += f"{err.message} ({err.table_list})\n"
+            if isinstance(err, TableExportError):
+                content += f"{err.message} ({err.table_list})\n"
+            else:
+                content += f"{err.message}\n"
 
         msg = EmailMessage()
         
