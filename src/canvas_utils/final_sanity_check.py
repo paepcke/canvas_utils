@@ -12,11 +12,15 @@ from pathlib import Path
 import re
 import smtplib
 import socket
+from enum import Enum
 
 from canvas_utils_exceptions import TableExportError, DatabaseError
 from config_info import ConfigInfo
 from utilities import Utilities
 
+class EmailReason(Enum):
+        HAPPY = 0
+        SAD   = 1
 
 class SanityChecker(object):
     '''
@@ -70,14 +74,16 @@ class SanityChecker(object):
             self.check_num_files()
         except TableExportError as e:
             print(f"*****ERROR: {e.message} ({e.table_list})")
-            detected_errors.append(e)
+            # This error will be picked up in the cronlog analysis:
+            # detected_errors.append(e)
             
         try:
             self.check_exported_file_lengths()
         except TableExportError as e:
             print(f"*****ERROR: {e.message} ({e.table_list})")
-            detected_errors.append(e)
-        
+            # This error will be picked up in the cronlog analysis:
+            # detected_errors.append(e)
+                    
         # Check latest cronlog for errors:
         cronlog_error_lines = self.check_cronlog_errors()
         if cronlog_error_lines is not None:
@@ -87,12 +93,12 @@ class SanityChecker(object):
         if len(detected_errors) > 0:
             # If we are running on the dev machine,
             # we can send email, b/c it has an SMTP service:
-            self.maybe_send_mail(detected_errors)
+            self.maybe_send_mail(detected_errors, reason=EmailReason.SAD)
     
         else:
             # Send an OK msg:
             time_now = datetime.now().isoformat()
-            self.maybe_send_mail(f"Ran fine; check time {time_now}")
+            self.maybe_send_mail(f"Ran fine; check time {time_now}", reason=EmailReason.HAPPY)
             
     #-------------------------
     # check_num_files
@@ -293,14 +299,20 @@ class SanityChecker(object):
     # maybe_send_mail 
     #--------------
     
-    def maybe_send_mail(self, error_list):
+    def maybe_send_mail(self, error_list, reason=EmailReason.SAD):
         '''
         If an SMTP server is available on the host
         we are running on, then construct a composite
         of all error messages, and email it to someone.
         
+        Depending on the 'reason' parm, subject line
+        will indicate success or failure.
+        
         @param error_list: list of error objects to report
         @type error_list: [TableExportError]
+        @param reason: whether or not the email is for a happy or 
+            sad occasion
+        @type reason: EmailReason
         @return: True if an email was sent, else False
         @rtype: bool
         '''
@@ -320,7 +332,7 @@ class SanityChecker(object):
         
         me = "AuxTableRefreshProcess@stanford.edu"
         you = self.admin_email_recipient
-        msg['Subject'] = "Error report from aux table refresh :-("
+        msg['Subject'] = "Report from aux table refresh " + ':-(' if reason == EmailReason.SAD else ':-)'
         msg['From'] = me
         msg['To'] = you
         # Send the message via our own SMTP server.
