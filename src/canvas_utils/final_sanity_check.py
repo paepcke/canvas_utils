@@ -11,6 +11,7 @@ from pathlib import Path
 import re
 import smtplib
 import socket
+from datetime import datetime
 
 from canvas_utils_exceptions import TableExportError
 from config_info import ConfigInfo
@@ -88,6 +89,11 @@ class SanityChecker(object):
             # we can send email, b/c it has an SMTP service:
             self.maybe_send_mail(detected_errors)
     
+        else:
+            # Send an OK msg:
+            time_now = datetime.now().isoformat()
+            self.maybe_send_mail(f"Ran fine; check time {time_now}")
+            
     #-------------------------
     # check_num_files
     #--------------
