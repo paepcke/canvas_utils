@@ -409,9 +409,10 @@ class AuxTableCopier(object):
         shell_script = os.path.join(os.path.dirname(__file__), 'call_mysql.sh')
         
         # Tell shell script where to find the MySQL pwd:
-#         if self.unittests and self.host == 'localhost':
-#             pass
-        pwd_file_pointer = self.config_info.canvas_pwd_file
+        if self.unittests and self.host == 'localhost':
+            pwd_file_pointer = ''
+        else:
+            pwd_file_pointer = self.config_info.canvas_pwd_file
 
         # Ensure the destination for the tsv file does not
         # exist at the outset:
