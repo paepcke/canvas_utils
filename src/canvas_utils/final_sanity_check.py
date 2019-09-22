@@ -4,6 +4,7 @@ Created on Sep 12, 2019
 
 @author: paepcke
 '''
+from datetime import datetime
 from email.message import EmailMessage
 import json
 import os
@@ -11,9 +12,8 @@ from pathlib import Path
 import re
 import smtplib
 import socket
-from datetime import datetime
 
-from canvas_utils_exceptions import TableExportError
+from canvas_utils_exceptions import TableExportError, DatabaseError
 from config_info import ConfigInfo
 from utilities import Utilities
 
@@ -82,7 +82,7 @@ class SanityChecker(object):
         cronlog_error_lines = self.check_cronlog_errors()
         if cronlog_error_lines is not None:
             msg = f"Error(s) in cronlog: {''.join(cronlog_error_lines)} ({str(self.get_latest_cronlog())})"
-            detected_errors.append(msg)
+            detected_errors.append(DatabaseError(msg))
           
         if len(detected_errors) > 0:
             # If we are running on the dev machine,
