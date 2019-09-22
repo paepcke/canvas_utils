@@ -109,3 +109,4 @@ src/canvas_utils/Queries/Save/
 setup.cfg
 *.*~
 
+typical_table_csv_file_sizes.json
