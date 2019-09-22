@@ -8,6 +8,7 @@ from email.message import EmailMessage
 import json
 import os
 from pathlib import Path
+import re
 import smtplib
 import socket
 
@@ -32,6 +33,7 @@ class SanityChecker(object):
     # The machine where table refreshes usually run.
     # An SMTP server is available there:
     DEVMACHINE_HOSTNAME = 'dmrapptooldev71.stanford.edu'
+    CRONLOG_DIR         = Path(Path.home(), 'cronlogs')
     
     #-------------------------
     # constructor 
@@ -74,7 +76,13 @@ class SanityChecker(object):
         except TableExportError as e:
             print(f"*****ERROR: {e.message} ({e.table_list})")
             detected_errors.append(e)
-            
+        
+        # Check latest cronlog for errors:
+        cronlog_error_lines = self.check_cronlog_errors()
+        if cronlog_error_lines is not None:
+            msg = f"Error(s) in cronlog: {''.join(cronlog_error_lines)} ({str(self.get_latest_cronlog())})"
+            detected_errors.append(msg)
+          
         if len(detected_errors) > 0:
             # If we are running on the dev machine,
             # we can send email, b/c it has an SMTP service:
@@ -203,6 +211,31 @@ class SanityChecker(object):
         return True
 
     #-------------------------
+    # check_cronlog_errors
+    #--------------
+
+    def check_cronlog_errors(self):
+        '''
+        Finds latest cronlog, and searches is for string 'ERROR'
+        Collects those lines, and returns them as a list if any
+        are found, else returns None
+        
+        @return: list of lines containing str 'ERROR' from most recent cronlog,
+            or None
+        @rtype: {None | [str]}
+        '''
+        
+        latest_log_path_obj = self.get_latest_cronlog()
+        error_lines = []
+        
+        with open(latest_log_path_obj, 'r') as fd:
+            for line in fd:
+                if re.findall(r'ERROR', line):
+                    error_lines.append(line)
+
+        return None if len(error_lines) == 0 else error_lines
+
+    #-------------------------
     # update_reasonable_file_sizes 
     #--------------
     
@@ -287,6 +320,26 @@ class SanityChecker(object):
         s.quit()
         
         return True
+
+
+    #-------------------------
+    # get_latest_cronlog 
+    #--------------
+
+    def get_latest_cronlog(self):
+        '''
+        Return a Path obj for the most recent cronlog
+        file. The cronlog directory is taken from SanityChecker.CRONLOG_DIR
+        
+        @return: path to most recent cronlog
+        @rtype: Path
+        '''
+        log_path_objs = [file_path_obj for file_path_obj in SanityChecker.CRONLOG_DIR.iterdir() if file_path_obj.suffix == '.log']
+        # Find the most recent:
+        log_path_objs_latest_last = sorted(log_path_objs, key=lambda log_path_obj:log_path_obj.stat().st_ctime)
+        latest_log_path_obj = log_path_objs_latest_last[-1]
+        return latest_log_path_obj
+
         
 
 

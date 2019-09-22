@@ -4,13 +4,13 @@ Created on Sep 12, 2019
 @author: paepcke
 '''
 import os
+from pathlib import Path
 import socket
 import tempfile
 import unittest
 
 from canvas_utils_exceptions import TableExportError
 from final_sanity_check import SanityChecker
-
 
 TEST_ALL = True
 #TEST_ALL = False
@@ -26,15 +26,25 @@ class SanityCheckTester(unittest.TestCase):
     def setUp(self):
         unittest.TestCase.setUp(self)
         self.sanity_checker = SanityChecker(unittest=True)
+        
         # Modify the table export directory so as not
         # to interfere with the real one:
         self.test_tmpdir      = tempfile.TemporaryDirectory(prefix='sanity_check_unittests')
         self.test_tmpdir_path = self.test_tmpdir.name
+        
         # Have sanity checker assume that copied tables
         # are to be in our temp dir:
+        
         self.sanity_checker.table_export_dir_path = self.test_tmpdir_path
         self.sanity_checker.init_table_vars()
         self.all_table_names = self.sanity_checker.all_tables
+        
+        # Make sanity checker believe that cronlog files 
+        # are in test_tmp_dir/cronlogs:
+        SanityChecker.CRONLOG_DIR = Path(os.path.join(self.test_tmpdir_path, 'cronlogs'))
+        
+        # Create the cronlogs file there:
+        Path(self.sanity_checker.CRONLOG_DIR).mkdir()
         
         # Content to put into tables to pretend they were
         # filled properly:
@@ -122,6 +132,37 @@ class SanityCheckTester(unittest.TestCase):
             self.fail(f'Should have seen a one-table zero-len error: {os.path.basename(zero_len_file_path)}')
         except TableExportError as e:
             self.assertEqual(e.table_list, [self.all_table_names[-1]])
+
+
+    #-------------------------
+    # test_error_log_analysis
+    #--------------
+
+    @unittest.skipIf(not TEST_ALL, 'Temporarily skipped')
+    def test_error_log_analysis(self):
+        
+        self.create_log_file(include_errors=False)
+
+        # Have method being tested find this error-free
+        # log file and report no error found:
+         
+        has_error = self.sanity_checker.check_cronlog_errors()
+        self.assertIsNone(has_error)
+        
+        # Check a log file with errors:
+        error_lines = self.create_log_file(include_errors=True)
+        has_error = self.sanity_checker.check_cronlog_errors()
+        self.assertEqual(has_error, error_lines)
+        
+        # To check that only the latest log is looked at:
+        
+        self.create_log_file(include_errors=False)
+
+        # Should get error-free even though now one older
+        # log message does have an error:
+         
+        has_error = self.sanity_checker.check_cronlog_errors()
+        self.assertIsNone(has_error)
             
     #-------------------------
     # test_error_emails 
@@ -182,7 +223,41 @@ class SanityCheckTester(unittest.TestCase):
             if not be_empty:
                 fd.write(self.tbl_test_content)
         
-
+    #-------------------------
+    # create_log_file
+    #--------------
+    
+    def create_log_file(self, include_errors=True):
+        '''
+        Create a log file with or without lines that
+        include the string 'ERROR'. Return None if the
+        requested file wasn't to have had error lines.
+        Else return a list of error lines usable in an
+        assert statement.
+        
+        @param include_errors: if True, some lines with the word
+            'ERROR' are included.  
+        @type include_errors: bool
+        @return: None if no error lines were to be included,
+            else return list of error lines that mixed into the log file
+        @rtype: {None | [str]}
+        '''
+        log_file_obj = Path(self.sanity_checker.CRONLOG_DIR, 'log_with_errors.log')
+        
+        if include_errors:
+            error_lines = ['line 2 is an ERROR.\n',
+                           'ERROR in line 4\n'
+                           ]
+        
+        with open(log_file_obj, 'w') as fd:
+            fd.write('line 1 is without error.\n')
+            if include_errors:
+                fd.write(error_lines[0])
+            fd.write('line 3 is fine\n')
+            if include_errors:            
+                fd.write(error_lines[1])
+            
+        return None if not include_errors else error_lines
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testCopiedFilesPresent']
