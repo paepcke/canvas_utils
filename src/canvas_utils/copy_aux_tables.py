@@ -14,6 +14,8 @@ import os
 import sys
 from subprocess import PIPE
 import subprocess
+from pathlib import Path
+
 
 from canvas_utils_exceptions import DatabaseError
 from config_info import ConfigInfo
@@ -457,8 +459,14 @@ class AuxTableCopier(object):
             if _completed_process.returncode != 0:
                 raise DatabaseError(f"Call to MySQL '{mysql_cmd[:20]}...' failed")
             
-            # Copy finished .tsv to final .csv:
-            self.cp_tsv_to_csv(retrieve_parms['tmp_file_name'], out_file_name, append=False)
+        # Copy finished .tsv to final .csv:
+        tsv_file_name = retrieve_parms['tmp_file_name']
+        tsv_path = Path(tsv_file_name)
+        if tsv_path.stat().st_size == 0:
+            raise DatabaseError(f"File {tsv_path} is empty; won't overwrite {out_file_name}")
+        
+        # Got a good tsv file:
+        self.cp_tsv_to_csv(tsv_file_name, out_file_name, append=False)
 
     #-------------------------
     # pull_by_term_year 
@@ -494,6 +502,10 @@ class AuxTableCopier(object):
 								   WHERE SUBSTRING_INDEX(term_name, ' ', -1) >= {start_year};        
                                 '''
         )
+        
+        if self.db.result_count() == 0:
+            raise DatabaseError("No data in Terms table (detected during GradingProcess enrollment_term_id select).")
+        
         enrollment_term_ids = [str(term_id) for term_id in term_ids]
         enrollment_term_id_strs = ','.join(enrollment_term_ids)
         self.log_info(f"Done getting list of enrollment_term_id since {start_year}...") 
