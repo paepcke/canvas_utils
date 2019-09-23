@@ -522,6 +522,9 @@ class AuxTableCopier(object):
         
         retrieve_parms['mysql_cmd'] = mysql_cmd
         retrieve_stmt_arr = [val for val in retrieve_parms.values()]
+        self.log_debug(f'''Submitting query:
+                        {mysql_cmd}
+        ''')
         _completed_process = subprocess.run(retrieve_stmt_arr, 
                                             #capture_output=True, # Only for debugging 
                                             shell=False)
@@ -1328,7 +1331,22 @@ if __name__ == '__main__':
                         default=[]
                         )
     
+    parser.add_argument('-l', '--loglevel',
+                        choices=['info','debug','error'],
+                        help="Level of logging messages. Default: 'info'",
+                        default=logging.INFO
+                        )
+
     args = parser.parse_args()
+
+    # Translate the logging level to official
+    # logging constants:
+    log_levels = {'info' : logging.INFO,
+                  'debug': logging.DEBUG,
+                  'error': logging.ERROR
+                  }
+    if isinstance(args.loglevel, str):
+        args.loglevel = log_levels[args.loglevel]
         
     # copier = AuxTableCopier(tables=['Terms'])
     try:
@@ -1338,7 +1356,8 @@ if __name__ == '__main__':
                                 dest_dir=args.destdir,
                                 tables=args.table,
                                 copy_format=args.format,
-                                overwrite_existing=args.remove    
+                                overwrite_existing=args.remove,
+                                logging_level=args.loglevel    
                                 )
         copy_result = copier.copy_tables()
     except KeyboardInterrupt:
