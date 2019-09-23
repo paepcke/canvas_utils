@@ -90,6 +90,7 @@ class AuxTableCopier(object):
         self.utils.setup_logging(logging_level)
         # For convenience:
         self.log_info = self.utils.log_info
+        self.log_debug = self.utils.log_debug
         
         if user is None:
             if self.unittests:
@@ -1332,7 +1333,7 @@ if __name__ == '__main__':
                         )
     
     parser.add_argument('-l', '--loglevel',
-                        choices=['info','debug','error'],
+                        choices=['info','debug','warning','error'],
                         help="Level of logging messages. Default: 'info'",
                         default=logging.INFO
                         )
@@ -1343,6 +1344,7 @@ if __name__ == '__main__':
     # logging constants:
     log_levels = {'info' : logging.INFO,
                   'debug': logging.DEBUG,
+                  'warning': logging.WARN,
                   'error': logging.ERROR
                   }
     if isinstance(args.loglevel, str):
