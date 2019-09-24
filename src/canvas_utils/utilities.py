@@ -380,10 +380,10 @@ class Utilities(object):
         return table_names        
 
     #-------------------------
-    # get_assignment_submissions_account_ids 
+    # get_account_ids_from_table 
     #--------------
     
-    def get_assignment_submissions_account_ids(self, db):
+    def get_account_ids_from_table(self, db, table_name):
         '''
         Return a unique list of account_id values in
         table AssignmentSubmissions. There are on the order
@@ -397,12 +397,14 @@ class Utilities(object):
     
         @param db: fully initialized db instance
         @type db: pysmysql_utils.MySQLDB
+        @param table_name: name of table from which to retrieve account_id's
+        @type table_name: str
         @return: list of AccountId instances
         @rtype: [AccountIdCollection]
         '''
         account_id_res = db.query(f'''
    									SELECT account_id, COUNT(*) AS num_entries
-    								FROM AssignmentSubmissions
+    								FROM {table_name}
     								GROUP BY account_id
     								ORDER BY num_entries DESC;        
                                     '''
