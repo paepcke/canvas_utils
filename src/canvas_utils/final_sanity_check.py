@@ -6,17 +6,19 @@ Created on Sep 12, 2019
 '''
 from datetime import datetime
 from email.message import EmailMessage
+from enum import Enum
 import json
 import os
 from pathlib import Path
 import re
 import smtplib
 import socket
-from enum import Enum
+import sys
 
 from canvas_utils_exceptions import TableExportError, DatabaseError
 from config_info import ConfigInfo
 from utilities import Utilities
+
 
 class EmailReason(Enum):
         HAPPY = 0
@@ -366,5 +368,11 @@ class SanityChecker(object):
 
 # -------------------------- Main ------------------
 if __name__ == '__main__':
+    
+    if len(sys.argv) > 1 and (sys.argv[1] == '-h' or sys.argv[1] == '--help'):
+        print("Performs tests to see whether the most recent\n" + 
+              "aux table pull succeed; sends email w/ result,\n" +
+              "and prints to console.")
+        sys.exit()
     
     SanityChecker()
