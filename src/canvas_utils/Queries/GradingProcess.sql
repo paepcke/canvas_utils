@@ -49,6 +49,8 @@ SELECT CourseAssignments.account_id,
        '35910000000000025'
        );
 
+CALL createIndexIfNotExists('account_id_idx', 'GradingProcess', 'account_id', NULL);
+
 # # Output CourseAssignments, AssignmentSubmissions, GradingProcess
 # # to csv. This happens on laptop:
 
