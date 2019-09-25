@@ -8,6 +8,7 @@ import getpass
 import logging
 import math
 import os
+from pathlib import Path
 import re
 import shutil
 import socket
@@ -672,6 +673,23 @@ class Utilities(object):
         for i in range(0, len(list_to_chop), chop_size):
             yield list_to_chop[i:i + chop_size]        
 
+
+    #-------------------------
+    # file_length 
+    #--------------
+
+    def file_length(self, file_path):
+        '''
+        Return the given absolute path's length,
+        or zero if the file does not exist.  
+        
+        @param file_path: path to file in question
+        @type file_path: str
+        '''
+        
+        if not os.path.exists(file_path):
+            return 0
+        return Path(file_path).stat().st_size
         
     # ------------------------ Logging Related Utilities -------------        
 
