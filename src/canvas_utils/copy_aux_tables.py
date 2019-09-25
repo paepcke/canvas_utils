@@ -476,7 +476,7 @@ class AuxTableCopier(object):
 
     def pull_by_term_year(self, retrieve_parms, table_name, field_list, out_file_name):
         '''
-        For from the very large GradingProcess table 
+        For the very large GradingProcess table, pull 
         only records since AuxTableCopier.GRADING_PROCESS_START_YEAR
         
         @param retrieve_parms: ordered dict of parameters to pass to the 
@@ -509,34 +509,22 @@ class AuxTableCopier(object):
             raise DatabaseError("No data in Terms table (detected during GradingProcess enrollment_term_id select).")
         
         enrollment_term_ids = [str(term_id) for term_id in term_ids]
-        enrollment_term_id_strs = ','.join(enrollment_term_ids)
         self.log_info(f"Done getting list of enrollment_term_id since {start_year}...") 
         
-        # Col names we want to export:
-        col_names = ','.join(field_list)
-        
-        mysql_cmd = f'''
-                      SELECT {col_names}
-                        FROM {table_name}
-                    WHERE enrollment_term_id IN ({enrollment_term_id_strs});  
-                      '''
-        
-        retrieve_parms['mysql_cmd'] = mysql_cmd
-        retrieve_stmt_arr = [val for val in retrieve_parms.values()]
-        self.log_debug(f'''Submitting query:
-                        {mysql_cmd}
-        ''')
-        _completed_process = subprocess.run(retrieve_stmt_arr, 
-                                            #capture_output=True, # Only for debugging 
-                                            shell=False)
+        # For each enrollment_term_id, retrieve each
+        # account separately to keep the MySQL server from
+        # croaking due to the number of rows being retrieved:
 
-        if _completed_process.returncode != 0:
-            raise DatabaseError(f"Call to MySQL '{mysql_cmd[:20]}...' failed")
+        for enrollment_term_id in enrollment_term_ids:
+            and_clause = f'''AND enrollment_term_id = {enrollment_term_id}'''
+            
+            retrieve_parms['mysql_clause'] = and_clause
+            self.pull_by_account_id(retrieve_parms, table_name, field_list, out_file_name)
 
     #-------------------------
     # pull_by_account_id
     #--------------
-
+    
     def pull_by_account_id(self, retrieve_parms, table_name, field_list, out_file_name):
         '''
         For the very large AssignmentSubmissions table we
@@ -546,7 +534,7 @@ class AuxTableCopier(object):
         piece by piece. 
         
         @param retrieve_parms: ordered dict of parameters to pass to the 
-            call_mysql.sh script
+            call_mysql.sh script (see header comment for method pull_from_account_list()
         @type retrieve_parms: {str : <any>}
         @param table_name: name of table to pull from
         @type table_name: str
@@ -561,47 +549,116 @@ class AuxTableCopier(object):
         # we are to get:
         
         self.log_info(f"Getting list of account_ids for table {table_name}...")
-        account_id_seq_objs = self.utils.get_assignment_submissions_account_ids(self.db)
+        account_id_seq_objs = self.utils.get_account_ids_from_table(self.db, table_name)
         self.log_info(f"Found {len(account_id_seq_objs)} distinct account_ids in {table_name}")
         
         col_names = ','.join(field_list)
+        
+        self.pull_from_account_list(table_name, retrieve_parms, out_file_name, account_id_seq_objs, col_names)
+            
+    #-------------------------
+    # pull_from_account_list 
+    #--------------
+    
+    def pull_from_account_list(self, table_name, retrieve_parms, out_file_name, account_id_seq_objs, col_names):
+        '''
+        Given appropriate information, including a list of
+        AccountIdCollection instances, pull all records with the
+        given account ids into a tsv file.
+        
+        The retrieve_parms dict (see below) may contain a
+        'mysql_clause' key, which adds an AND clause to the
+        sql used. Example, as this method cycles through 
+        pulling each batch of account_id_seq that are in 
+        list account_id_seq_objs, the following query might
+        be constructed:
+        
+        SELECT account_id,course_id, ...
+		  FROM GradingProcess
+		 WHERE account_id IN (35910000000000030)
+		   AND enrollment_term_id = 35910000000000022;
+		   
+		The portion up to and including the WHERE clause gets
+		constructed in each run through the loop below, 
+		changing the range of account_id's each time. But
+		the   
+		      "AND enrollment_term_id = 35910000000000022;"
+		      
+		was passed in as the mysql_clause, and will be constant.
+		
+		Note: this method check whether any content is already
+		in out_file_name. If not, the first line of the first loop's
+		db result will be written to the out_file_name. But if
+		the out_file_name is already partially filled, the first
+		line of each query result (i.e. the header) will be discarded.
+        
+        This method may be called multiple times with different
+        AND clauses.
+        
+        @param table_name: name of table from which to pull
+        @type table_name: str
+        @param retrieve_parms: data structure describing the query parms:
+           OrderedDict({
+            'shell_script' : shell_script,    # usually full path to call_mysql.sh
+            'host'         : host,            # MySQL host
+            'user'         : user,            # MySQL user
+            'pwd_file_ptr' : pwd_file_pointer,# path to file with MySQL password
+            'src_db'       : src_db,          # database in MySQL server that contains table_name
+            'mysql_path'   : mysql_path,      # local path to the mysql client binary
+            'tmp_file_name': tmp_file_name,   # the .tsv file name in which to put result
+            'mysql_clause' : mysql_cmd        # if not Null, then a MySQL AND clause to 
+                                              #   add to the WHERE account id in <range>... 
+            })
+        @type retrieve_parms: OrderedDict
+        @param out_file_name: path to the final .csv file
+        @type out_file_name: str
+        @param account_id_seq_objs: list of 
+        @type account_id_seq_objs: [AccountCollection]
+        @param col_names: comma-separated list of column names to include in output
+        @type col_names: str
+        '''
+        
+        if self.utils.file_length(out_file_name) == 0:
+            # If this is the first batch, we include
+            # the column header:
+            appending = False
+        else:
+            appending = True
         
         # For each seq of account_id, pull the corresponding
         # rows, and put them into a .tsv tmp file. So, for
         # accounts with lots of rows, we'll pull just rows for
         # that account. For accounts with smaller number or rows,
         # we pull all the rows from a few account_ids together.
+        
+        # Get the MySQL AND clause:
+        and_clause = retrieve_parms['mysql_clause']
+        # Don't want AND clause in the dict any more:
+        del retrieve_parms['mysql_clause']
 
-        col_header_written = False
         for account_id_seq_obj in account_id_seq_objs:
             range_str = ','.join([str(account_id) for account_id in account_id_seq_obj.account_ids])
             mysql_cmd = f'''
-                          SELECT {col_names}
-                            FROM {table_name}
-                        WHERE account_id IN ({range_str});  
-                          '''
+                      SELECT {col_names}
+                        FROM {table_name}
+                    WHERE account_id IN ({range_str})
+                      '''
+            # Add the AND clause if one was given:
+            if and_clause is not None:
+                mysql_cmd += and_clause + ';'
+            
             retrieve_parms['mysql_cmd'] = mysql_cmd
             retrieve_stmt_arr = retrieve_stmt_arr = [val for val in retrieve_parms.values()]
-            _completed_process = subprocess.run(retrieve_stmt_arr, 
-                                                #capture_output=True, # Only for debugging 
-                                                shell=False)
-    
+            _completed_process = subprocess.run(retrieve_stmt_arr, #capture_output=True, # Only for debugging
+                shell=False)
             if _completed_process.returncode != 0:
                 raise DatabaseError(f"Call to MySQL '{mysql_cmd[:20]}...' failed")
-
-
-            # If this is the first batch, we include 
-            # the column header:
-            appending = True if col_header_written else False
             
-            self.cp_tsv_to_csv(retrieve_parms['tmp_file_name'], 
-                               out_file_name,
-                               append=appending
-                               )
-            col_header_written = True
-            
+            self.cp_tsv_to_csv(retrieve_parms['tmp_file_name'], out_file_name, append=appending)
+            appending = True
             self.log_info(f"Pulled {account_id_seq_obj.num_rows} rows from table {table_name}")
-            
+    
+
     #-------------------------
     # cp_tsv_to_csv 
     #--------------
@@ -624,7 +681,7 @@ class AuxTableCopier(object):
         @type append: bool
         '''
         self.log_info(f"Copying tsv file {src_file_name} to csv {dst_file_name}...")
-        with open(dst_file_name, 'a' if append else 'w') as out_fd:
+        with open(dst_file_name, 'a') as out_fd:
             with open(src_file_name, 'r', encoding='ISO-8859-1') as in_fd:
                 csv_writer = csv.writer(out_fd,
                                         delimiter=',',
@@ -635,13 +692,19 @@ class AuxTableCopier(object):
                                         )
                 
                 if append:
-                    # Throw away the column header: 
-                    next(in_fd)
+                    # Throw away the column header:
+                    try:
+                        next(in_fd)
+                    except StopIteration:
+                        # File is empty:
+                        self.log_info(f"Empty .tsv file: {src_file_name}; doing nothing.")
+                        return
                 for line in in_fd:
                     split_line = line.strip().split('\t')
                     # Write to dest as csv:
                     csv_writer.writerow(split_line)
-        self.log_info(f"Done copying tsv file {src_file_name} to csv {dst_file_name}.")        
+        self.log_info(f"Done copying tsv file {src_file_name} to csv {dst_file_name}.")
+                
     #-------------------------
     # populate_table_schema 
     #--------------
