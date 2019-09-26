@@ -632,7 +632,7 @@ class AuxTableCopier(object):
         # we pull all the rows from a few account_ids together.
         
         # Get the MySQL AND clause:
-        and_clause = retrieve_parms['mysql_clause']
+        and_clause = retrieve_parms.get('mysql_clause', None)
         # Don't want AND clause in the dict any more:
         del retrieve_parms['mysql_clause']
 
