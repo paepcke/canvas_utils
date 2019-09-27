@@ -634,7 +634,8 @@ class AuxTableCopier(object):
         # Get the MySQL AND clause:
         and_clause = retrieve_parms.get('mysql_clause', None)
         # Don't want AND clause in the dict any more:
-        del retrieve_parms['mysql_clause']
+        if and_clause is not None:
+            del retrieve_parms['mysql_clause']
 
         for account_id_seq_obj in account_id_seq_objs:
             range_str = ','.join([str(account_id) for account_id in account_id_seq_obj.account_ids])
