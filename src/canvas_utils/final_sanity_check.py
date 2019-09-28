@@ -310,8 +310,9 @@ class SanityChecker(object):
         Depending on the 'reason' parm, subject line
         will indicate success or failure.
         
-        @param error_list: list of error objects to report
-        @type error_list: [TableExportError]
+        @param error_list: list of error objects to report, or
+            a single string with a message about success outcome.
+        @type error_list: { str | [TableExportError]}
         @param reason: whether or not the email is for a happy or 
             sad occasion
         @type reason: EmailReason
@@ -321,12 +322,15 @@ class SanityChecker(object):
         if socket.gethostname() != SanityChecker.DEVMACHINE_HOSTNAME:
             return False
 
-        content = ""        
-        for err in error_list:
-            if isinstance(err, TableExportError):
-                content += f"{err.message} ({err.table_list})\n"
-            else:
-                content += f"{err.message}\n"
+        content = ""
+        if isinstance(error_list, str):
+            content = error_list
+        else:      
+            for err in error_list:
+                if isinstance(err, TableExportError):
+                    content += f"{err.message} ({err.table_list})\n"
+                else:
+                    content += f"{err.message}\n"
 
         msg = EmailMessage()
         
