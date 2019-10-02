@@ -38,6 +38,11 @@ class AuxTableCopier(object):
     # export will take:    
     #*****GRADING_PROCESS_START_YEAR = datetime.datetime.now().year - 1
     GRADING_PROCESS_START_YEAR = datetime.datetime.now().year - 1
+    
+    # Number of rows to pull in each batch
+    # when a table needs to be pulled in batches
+    # via an auto-increment seq number:
+    SEQ_NUM_BATCH_SIZE = 50000
         
     #-------------------------
     # Constructor 
@@ -452,6 +457,10 @@ class AuxTableCopier(object):
         elif table_name == 'GradingProcess':
             # Pull only the records since AuxTableCopier.GRADING_PROCESS_START_YEAR
             self.pull_by_term_year(retrieve_parms, table_name, field_list, out_file_name)
+        elif table_name == 'AllUsers':
+            # Pull batches by autoincrement sequence numbers,
+            # b/c else MySQL server balks:
+            self.pull_by_seq_num(retrieve_parms, table_name, field_list, out_file_name)
         else:
             retrieve_stmt_arr = [val for val in retrieve_parms.values()]
             _completed_process = subprocess.run(retrieve_stmt_arr, 
@@ -469,6 +478,56 @@ class AuxTableCopier(object):
         
         # Got a good tsv file:
         self.cp_tsv_to_csv(tsv_file_name, out_file_name, append=False)
+
+    #-------------------------
+    # pull_by_seq_num
+    #--------------
+
+    def pull_by_seq_num(self, retrieve_parms, table_name, field_list, out_file_name):
+        '''
+        For the very large AllUsers table, pull records in batches
+        of AuxTableCopier.SEQ_NUM_BATCH_SIZE rows 
+        
+        @param retrieve_parms: ordered dict of parameters to pass to the 
+            call_mysql.sh script
+        @type retrieve_parms: {str : <any>}
+        @param table_name: name of table to pull from
+        @type table_name: str
+        @param field_list: list of column names to retrieve in proper order
+        @type field_list: [str]
+        @param out_file_name: path to the .csv file where the data is to land
+        @type out_file_name: str
+        '''
+        
+        col_names = ','.join(field_list)
+        
+        # For each seq number range, pull the corresponding
+        # rows, and put them into a .tsv tmp file.
+        
+        # Find max row number:
+        
+        max_row = self.db.query("SELECT MAX(seq_num) FROM AllUsers").next()
+        # For convenience:
+        batch_size = AuxTableCopier.SEQ_NUM_BATCH_SIZE
+        # First time through loop we want to start an empty
+        # file:
+        appending = False
+        for seq_num in range(1, max_row, batch_size):
+            mysql_cmd = f'''
+                      SELECT {col_names}
+                        FROM {table_name}
+                    WHERE seq_num BETWEEN {seq_num} AND {seq_num + batch_size-1};
+                      '''
+            retrieve_parms['mysql_cmd'] = mysql_cmd
+            retrieve_stmt_arr = retrieve_stmt_arr = [val for val in retrieve_parms.values()]
+            _completed_process = subprocess.run(retrieve_stmt_arr, #capture_output=True, # Only for debugging
+                shell=False)
+            if _completed_process.returncode != 0:
+                raise DatabaseError(f"Call to MySQL '{mysql_cmd[:20]}...' failed")
+            
+            self.cp_tsv_to_csv(retrieve_parms['tmp_file_name'], out_file_name, append=appending)
+            appending = True
+            self.log_info(f"Pulled batch of (up to) {batch_size} rows from table {table_name}")
 
     #-------------------------
     # pull_by_term_year 
