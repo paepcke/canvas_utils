@@ -6,12 +6,13 @@ CREATE TABLE AllUsers (
     type varchar(30),
     role varchar(30),
     workflow_state varchar(20)
-    ) engine=MyISAM;
+    ) engine=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 # <end_creation>
 
 INSERT INTO AllUsers
-  SELECT user_id,
+  SELECT NULL,
+         user_id,
          NULL AS name,
          type,
          case 
