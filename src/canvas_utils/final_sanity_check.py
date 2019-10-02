@@ -96,11 +96,13 @@ class SanityChecker(object):
             # If we are running on the dev machine,
             # we can send email, b/c it has an SMTP service:
             self.maybe_send_mail(detected_errors, reason=EmailReason.SAD)
+            exit 1
     
         else:
             # Send an OK msg:
             time_now = datetime.now().isoformat()
             self.maybe_send_mail(f"Ran fine; check time {time_now}", reason=EmailReason.HAPPY)
+            exit 0
             
     #-------------------------
     # check_num_files
