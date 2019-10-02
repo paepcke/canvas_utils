@@ -1,5 +1,6 @@
 DROP TABLE IF EXISTS AllUsers;
 CREATE TABLE AllUsers (
+    seq_num int AUTO_INCREMENT PRIMARY KEY,
     user_id bigint,
     name varchar(255),
     type varchar(30),
