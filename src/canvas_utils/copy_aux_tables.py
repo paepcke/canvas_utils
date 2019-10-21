@@ -477,7 +477,7 @@ class AuxTableCopier(object):
             raise DatabaseError(f"File {tsv_path} is empty; won't overwrite {out_file_name}")
         
         # Got a good tsv file:
-        self.cp_tsv_to_csv(tsv_file_name, out_file_name, append=False)
+        self.cp_tsv_to_tsv(tsv_file_name, out_file_name, append=False)
 
     #-------------------------
     # pull_by_seq_num
@@ -525,7 +525,7 @@ class AuxTableCopier(object):
             if _completed_process.returncode != 0:
                 raise DatabaseError(f"Call to MySQL '{mysql_cmd[:20]}...' failed")
             
-            self.cp_tsv_to_csv(retrieve_parms['tmp_file_name'], out_file_name, append=appending)
+            self.cp_tsv_to_tsv(retrieve_parms['tmp_file_name'], out_file_name, append=appending)
             appending = True
             self.log_info(f"Pulled batch of (up to) {batch_size} rows from table {table_name}")
 
@@ -714,11 +714,47 @@ class AuxTableCopier(object):
             if _completed_process.returncode != 0:
                 raise DatabaseError(f"Call to MySQL '{mysql_cmd[:20]}...' failed")
             
-            self.cp_tsv_to_csv(retrieve_parms['tmp_file_name'], out_file_name, append=appending)
+            self.cp_tsv_to_tsv(retrieve_parms['tmp_file_name'], out_file_name, append=appending)
             appending = True
             self.log_info(f"Pulled {account_id_seq_obj.num_rows} rows from table {table_name}")
     
 
+    #-------------------------
+    # cp_tsv_to_tsv 
+    #--------------
+
+    def cp_tsv_to_tsv(self, src_file_name, dst_file_name, append=False):
+        '''
+        Copies a tsv file from src to dest. Along the way,
+        replaces all tab chars that are embedded in columns
+        with 8 spaces.
+        
+        @param src_file_name: full path to source file
+        @type src_file_name: str
+        @param dst_file_name: full path to destination file
+        @type dst_file_name: str
+        @param append: whether or not to append to destination
+        @type append: bool
+        '''
+        self.log_info(f"Copying tsv file {src_file_name} to csv {dst_file_name}...")
+        with open(dst_file_name, 'a') as out_fd:
+            with open(src_file_name, 'r', encoding='ISO-8859-1') as in_fd:
+                if append:
+                    # Throw away the column header:
+                    try:
+                        next(in_fd)
+                    except StopIteration:
+                        # File is empty:
+                        self.log_info(f"Empty .tsv file: {src_file_name}; doing nothing.")
+                        return
+                for line in in_fd:
+                    # Replace any backslashed tab by eight spaces:
+                    safe_line = line.replace("\\\t", "        ")
+                    # Replace \n and \r in the text with spaces:
+                    safe_line = safe_line.replace("\\n"," ")
+                    safe_line = safe_line.replace("\\r"," ")
+                    out_fd.write(safe_line)
+        
     #-------------------------
     # cp_tsv_to_csv 
     #--------------
@@ -748,7 +784,7 @@ class AuxTableCopier(object):
                                         quoting=csv.QUOTE_ALL,
                                         escapechar='\\',
                                         doublequote=False,
-                                        quotechar='"',
+                                        quotechar='||',
                                         )
                 
                 if append:
