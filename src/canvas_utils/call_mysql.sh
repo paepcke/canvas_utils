@@ -5,6 +5,16 @@
 # database name, the full path to the mysql executable, and the
 # statement.
 #
+# **** The following maybe obsolete, subject to testing:
+# The TSV output is filtered as follows to make the Informatica
+# tool happy:
+#
+#   o Escaped TAB char in columns with free text are replaced
+#     by eight spaces.
+#   o Line feed characters (\n) embedded in columns of text are
+#     replaced with one space.
+#
+#
 # Needed b/c subprocess() had trouble calling MySQL directly. Should
 # be possible, though, with more time investment.
 #
@@ -43,7 +53,8 @@ PWD=$(<${PWD_FILE_POINTER})
 #    [client]
 #    host = myhost
 #    user = myuser
-#    password = mypasswor
+#    password = mypassword
+
 
 if [[ -z $PWD ]]
 then   
@@ -51,7 +62,8 @@ then
     exit $?
 else
     ${MYSQL_PATH} --defaults-extra-file=<(printf "[client]\nhost = %s\nuser = %s\npassword = %s" "$HOST" "$USER" "$PWD")\
-                  $SRC_DB -e " ${SELECT_STATEMENT}" > $OUTFILE
+                  $SRC_DB --batch -e " ${SELECT_STATEMENT}" > $OUTFILE
+                  # $SRC_DB --batch -e " ${SELECT_STATEMENT}" > $OUTFILE | sed  "s/\\\t/        /g" | sed "s/\\\n/ /g"
     exit $?
 fi
 

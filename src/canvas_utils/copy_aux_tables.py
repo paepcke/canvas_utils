@@ -777,14 +777,14 @@ class AuxTableCopier(object):
         @type append: bool
         '''
         self.log_info(f"Copying tsv file {src_file_name} to csv {dst_file_name}...")
-        with open(dst_file_name, 'a') as out_fd:
+        with open(dst_file_name, 'w') as out_fd:
             with open(src_file_name, 'r', encoding='ISO-8859-1') as in_fd:
                 csv_writer = csv.writer(out_fd,
                                         delimiter=',',
                                         quoting=csv.QUOTE_ALL,
                                         escapechar='\\',
-                                        doublequote=False,
-                                        quotechar='||',
+                                        doublequote=False,  # Use escape char for '"'
+                                        quotechar='"',
                                         )
                 
                 if append:
