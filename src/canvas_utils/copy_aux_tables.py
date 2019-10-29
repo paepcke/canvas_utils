@@ -470,14 +470,22 @@ class AuxTableCopier(object):
             if _completed_process.returncode != 0:
                 raise DatabaseError(f"Call to MySQL '{mysql_cmd[:20]}...' failed")
             
-        # Copy finished .tsv to final .csv:
+        # Sanity check: is tsv file empty:
         tsv_file_name = retrieve_parms['tmp_file_name']
         tsv_path = Path(tsv_file_name)
         if tsv_path.stat().st_size == 0:
             raise DatabaseError(f"File {tsv_path} is empty; won't overwrite {out_file_name}")
         
-        # Got a good tsv file:
-        self.cp_tsv_to_tsv(tsv_file_name, out_file_name, append=False)
+        # No longer needed: Informatica can handle output of MySQL
+        
+#         # Copy finished .tsv to final .csv:
+#         tsv_file_name = retrieve_parms['tmp_file_name']
+#         tsv_path = Path(tsv_file_name)
+#         if tsv_path.stat().st_size == 0:
+#             raise DatabaseError(f"File {tsv_path} is empty; won't overwrite {out_file_name}")
+#         
+#         # Got a good tsv file:
+#         self.cp_tsv_to_tsv(tsv_file_name, out_file_name, append=False)
 
     #-------------------------
     # pull_by_seq_num
