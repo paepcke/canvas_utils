@@ -28,11 +28,11 @@ class SanityChecker(object):
     '''
     Checks superficially whether aux table export 
     runs succeeded. 
-       o Ensures that all tables have a .csv file in 
+       o Ensures that all tables have a .tsv file in 
          the table copy dir, and that 
        o none of those have less data than last time
        
-    Maintains a json file Data/typical_table_csv_file_sizes.json.
+    Maintains a json file Data/typical_table_tsv_file_sizes.json.
     If a new table is added to the Queries subdir, this JSON is
     updated.
     '''
@@ -62,7 +62,7 @@ class SanityChecker(object):
         
         # Path to json of 'reasonable' table file lengths
         # to expect when tables are exported:
-        self.resonable_file_sizes_path = os.path.join(self.curr_dir, 'Data', 'typical_table_csv_file_sizes.json')
+        self.resonable_file_sizes_path = os.path.join(self.curr_dir, 'Data', 'typical_table_tsv_file_sizes.json')
         
         HOME = os.getenv('HOME')
         self.table_export_dir_path = f"{HOME}/CanvasTableCopies"
@@ -96,13 +96,13 @@ class SanityChecker(object):
             # If we are running on the dev machine,
             # we can send email, b/c it has an SMTP service:
             self.maybe_send_mail(detected_errors, reason=EmailReason.SAD)
-            exit 1
+            sys.exit(1)
     
         else:
             # Send an OK msg:
             time_now = datetime.now().isoformat()
             self.maybe_send_mail(f"Ran fine; check time {time_now}", reason=EmailReason.HAPPY)
-            exit 0
+            sys.exit(0)
             
     #-------------------------
     # check_num_files
@@ -110,7 +110,7 @@ class SanityChecker(object):
         
     def check_num_files(self):
         '''
-        Return True if there is one TableName.csv file
+        Return True if there is one TableName.tsv file
         in the table copy directory as there are table
         definitions in the Queries subdir. I missing tables,
         they are printed in an error msg, and False is returned.
@@ -121,7 +121,7 @@ class SanityChecker(object):
             list of missing tables will be in the exceptions tables_list
             property
         '''
-        # Must have at least the aux tables as .csv files 
+        # Must have at least the aux tables as .tsv files 
         # in the dir to which we export tables. There might be
         # others, such as backups. So the intersect of just the
         # aux tables and the tables represented in the copy dest
@@ -137,25 +137,25 @@ class SanityChecker(object):
 
     def check_exported_file_dates(self, time_threshold=24):
         '''
-        Ensures that all the exported .csv tables are reasonably
+        Ensures that all the exported .tsv tables are reasonably
         fresh. Only produces a warning: if any table is older
         by more than 24 hours than the most reacent table. 
         
-        @param time_threshold: number of hours within which .csv
+        @param time_threshold: number of hours within which .tsv
             file exports need to have been created to avoid a 
             warning message
         @type time_threshold: int
-        @return: list of table names whose .csv file is older
+        @return: list of table names whose .tsv file is older
             than time_threshold hours than the most recent table
-            .csv file.
+            .tsv file.
         '''
         # Time threshold in seconds:
         secs_threshold = 3600 * time_threshold
         
-        # Create dict: Table name==>.csv-file-date
+        # Create dict: Table name==>.tsv-file-date
         tbl_age_dict = {}
         for tbl_nm in self.copied_tables_set:
-            tbl_path = os.path.join(self.table_export_dir_path, tbl_nm + '.csv')
+            tbl_path = os.path.join(self.table_export_dir_path, tbl_nm + '.tsv')
             # Last modified time in seconds since epoch:
             last_mod_time = os.path.getctime(tbl_path)
             tbl_age_dict[tbl_nm] = last_mod_time
@@ -178,12 +178,12 @@ class SanityChecker(object):
         '''
         Ensure none of the export files is
         less than what is stated as expected in file
-        Data/typical_table_csv_file_sizes.json. We
+        Data/typical_table_tsv_file_sizes.json. We
         assume that the content of this file is available
         in self.putative_file_sizes_dict.
         
         If we find a new table, one that is not represented
-        in the typical_table_csv_file_sizes.json file, we
+        in the typical_table_tsv_file_sizes.json file, we
         add the table's current file size as the desirable one,
         unless it's zero.
         
@@ -196,7 +196,7 @@ class SanityChecker(object):
         '''
         shrunken_tables  = []
         for table_name in self.all_tables:
-            file_path  = os.path.join(self.table_export_dir_path, table_name + '.csv')
+            file_path  = os.path.join(self.table_export_dir_path, table_name + '.tsv')
             try:
                 file_stats = os.stat(file_path)
             except IOError:
@@ -207,7 +207,7 @@ class SanityChecker(object):
                 expected_minimal_file_len = self.putative_file_sizes_dict[table_name]
             except KeyError:
                 # New table that is not yet represented in file
-                # typical_table_csv_file_sizes.json:
+                # typical_table_tsv_file_sizes.json:
                 self.putative_file_sizes_dict[table_name] = file_len
                 self.update_reasonable_file_sizes(self.putative_file_sizes_dict)
                 expected_minimal_file_len = file_len
@@ -260,7 +260,7 @@ class SanityChecker(object):
         Given a dict of table-->exprected-csv-file-size, save
         the dict as JSON in self.reasonable_file_sizes_path.
         
-        @param file_size_dict: mapping of table names to expected csv file size
+        @param file_size_dict: mapping of table names to expected tsv file size
         @type file_size_dict: {src : int}
         '''
         with open(self.resonable_file_sizes_path, 'w') as fd:
@@ -286,9 +286,9 @@ class SanityChecker(object):
         
         all_copied_table_files = os.listdir(self.table_export_dir_path)
         # Don't want the schema files:
-        csv_files = filter(lambda file_name: file_name.endswith('.csv'), all_copied_table_files)
+        tsv_files = filter(lambda file_name: file_name.endswith('.tsv'), all_copied_table_files)
         # Get the table names:
-        self.copied_tables = [Path(file_name).stem for file_name in csv_files]
+        self.copied_tables = [Path(file_name).stem for file_name in tsv_files]
 
         self.all_tables_set = set(self.all_tables)
         self.copied_tables_set   = set(self.copied_tables)

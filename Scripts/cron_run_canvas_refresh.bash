@@ -13,7 +13,8 @@ then
     mkdir $HOME/cronlogs
 fi
 
-# Same for destination of .csv file:
+# Same for temporary destination of .tsv files
+# from database exports:
 if [[ ! -e $CSV_DIR ]]
 then
     mkdir $CSV_DIR
@@ -39,7 +40,8 @@ $HOME/anaconda3/bin/activate canvas_utils && \
 
 if [[ $? == 0 ]]
 then
-    mv $CSV_DIR/*.csv $PICKUP_DIR
+    mv $CSV_DIR/*.tsv $PICKUP_DIR
+    mv $CSV_DIR/*.sql $PICKUP_DIR    
 fi
 
         
