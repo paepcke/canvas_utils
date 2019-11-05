@@ -52,7 +52,7 @@ class AuxTableCopier(object):
                  user=None, 
                  db_pwd=None,
                  host=None, 
-                 dest_dir='/tmp', 
+                 dest_dir=None, 
                  overwrite_existing=True,
                  tables=None,    # Default: all tables are copied 
                  copy_format='csv', 
@@ -106,7 +106,7 @@ class AuxTableCopier(object):
             self.user = user
         
         if dest_dir is None:
-            self.dest_dir = '/tmp'
+            self.dest_dir = self.config_info.oracle_tbl_dest_dir
         else:
             if os.path.isfile(dest_dir):
                 raise ValueError(f"Destination 'directory' {dest_dir} is a file.")
@@ -401,8 +401,8 @@ class AuxTableCopier(object):
             table_schema = self.schema
                   
         table_name    = table_schema.table_name
-        out_file_name = os.path.join(self.dest_dir, table_name) + '.csv'
-        tmp_file_name = os.path.join('/tmp', table_name) + '.tsv'
+        out_file_name = os.path.join(self.dest_dir, table_name) + '.tsv'
+        #****** tmp_file_name = os.path.join('/tmp', table_name) + '.tsv'
         
         # Array of col names for the header line.
         # The csv writer will add quotes around the col names:
@@ -423,8 +423,8 @@ class AuxTableCopier(object):
         # Ensure the destination for the tsv file does not
         # exist at the outset:
         
-        if os.path.exists(tmp_file_name):
-            os.remove(tmp_file_name)
+        if os.path.exists(out_file_name):
+            os.remove(out_file_name)
         
         mysql_cmd = f'''SELECT {', '.join(field_list)}
                           FROM {table_name};
@@ -437,7 +437,7 @@ class AuxTableCopier(object):
             'pwd_file_ptr' : pwd_file_pointer,
             'src_db'       : self.src_db,
             'mysql_path'   : self.mysql_path,
-            'tmp_file_name': tmp_file_name,
+            'tmp_file_name': out_file_name,
             'mysql_cmd'    : mysql_cmd      # Method pull_by_account_id() relies on this being last!
             })
         
@@ -471,10 +471,10 @@ class AuxTableCopier(object):
                 raise DatabaseError(f"Call to MySQL '{mysql_cmd[:20]}...' failed")
             
         # Sanity check: is tsv file empty:
-        tsv_file_name = retrieve_parms['tmp_file_name']
+        tsv_file_name = retrieve_parms['out_file_name']
         tsv_path = Path(tsv_file_name)
         if tsv_path.stat().st_size == 0:
-            raise DatabaseError(f"File {tsv_path} is empty; won't overwrite {out_file_name}")
+            raise DatabaseError(f"Destination file {tsv_path} is empty; table {table_name} retrieval failed.")
         
         # No longer needed: Informatica can handle output of MySQL
         
@@ -494,7 +494,8 @@ class AuxTableCopier(object):
     def pull_by_seq_num(self, retrieve_parms, table_name, field_list, out_file_name):
         '''
         For the very large AllUsers table, pull records in batches
-        of AuxTableCopier.SEQ_NUM_BATCH_SIZE rows 
+        of AuxTableCopier.SEQ_NUM_BATCH_SIZE rows. Assume that out_file_name
+        is empty or does not exist. 
         
         @param retrieve_parms: ordered dict of parameters to pass to the 
             call_mysql.sh script
@@ -503,7 +504,7 @@ class AuxTableCopier(object):
         @type table_name: str
         @param field_list: list of column names to retrieve in proper order
         @type field_list: [str]
-        @param out_file_name: path to the .csv file where the data is to land
+        @param out_file_name: path to the .tsv file where the data is to land
         @type out_file_name: str
         '''
         
@@ -517,9 +518,7 @@ class AuxTableCopier(object):
         max_row = self.db.query("SELECT MAX(seq_num) FROM AllUsers").next()
         # For convenience:
         batch_size = AuxTableCopier.SEQ_NUM_BATCH_SIZE
-        # First time through loop we want to start an empty
-        # file:
-        appending = False
+
         for seq_num in range(1, max_row, batch_size):
             mysql_cmd = f'''
                       SELECT {col_names}
@@ -533,8 +532,7 @@ class AuxTableCopier(object):
             if _completed_process.returncode != 0:
                 raise DatabaseError(f"Call to MySQL '{mysql_cmd[:20]}...' failed")
             
-            self.cp_tsv_to_tsv(retrieve_parms['tmp_file_name'], out_file_name, append=appending)
-            appending = True
+            # self.cp_tsv_to_tsv(retrieve_parms['out_file_name'], out_file_name, append=appending)
             self.log_info(f"Pulled batch of (up to) {batch_size} rows from table {table_name}")
 
     #-------------------------
@@ -553,7 +551,7 @@ class AuxTableCopier(object):
         @type table_name: str
         @param field_list: list of column names to retrieve in proper order
         @type field_list: [str]
-        @param out_file_name: path to the .csv file where the data is to land
+        @param out_file_name: path to the .tsv file where the data is to land
         @type out_file_name: str
         '''
         # Convenience copy:
@@ -607,7 +605,7 @@ class AuxTableCopier(object):
         @type table_name: str
         @param field_list: list of column names to retrieve in proper order
         @type field_list: [str]
-        @param out_file_name: path to the .csv file where the data is to land
+        @param out_file_name: path to the .tsv file where the data is to land
         @type out_file_name: str
         '''
         
@@ -684,13 +682,15 @@ class AuxTableCopier(object):
         @param col_names: comma-separated list of column names to include in output
         @type col_names: str
         '''
-        
-        if self.utils.file_length(out_file_name) == 0:
-            # If this is the first batch, we include
-            # the column header:
-            appending = False
-        else:
-            appending = True
+
+#*********        
+#         if self.utils.file_length(out_file_name) == 0:
+#             # If this is the first batch, we include
+#             # the column header:
+#             appending = False
+#         else:
+#             appending = True
+#*********
         
         # For each seq of account_id, pull the corresponding
         # rows, and put them into a .tsv tmp file. So, for
@@ -722,8 +722,8 @@ class AuxTableCopier(object):
             if _completed_process.returncode != 0:
                 raise DatabaseError(f"Call to MySQL '{mysql_cmd[:20]}...' failed")
             
-            self.cp_tsv_to_tsv(retrieve_parms['tmp_file_name'], out_file_name, append=appending)
-            appending = True
+            #****self.cp_tsv_to_tsv(retrieve_parms['tmp_file_name'], out_file_name, append=appending)
+            #****appending = True
             self.log_info(f"Pulled {account_id_seq_obj.num_rows} rows from table {table_name}")
     
 
