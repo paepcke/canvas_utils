@@ -437,7 +437,7 @@ class AuxTableCopier(object):
             'pwd_file_ptr' : pwd_file_pointer,
             'src_db'       : self.src_db,
             'mysql_path'   : self.mysql_path,
-            'tmp_file_name': out_file_name,
+            'out_file_name': out_file_name,
             'mysql_cmd'    : mysql_cmd      # Method pull_by_account_id() relies on this being last!
             })
         
