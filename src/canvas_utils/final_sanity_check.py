@@ -65,7 +65,7 @@ class SanityChecker(object):
         self.resonable_file_sizes_path = os.path.join(self.curr_dir, 'Data', 'typical_table_tsv_file_sizes.json')
         
         HOME = os.getenv('HOME')
-        self.table_export_dir_path = f"{HOME}/CanvasTableCopies"
+        self.table_export_dir_path = self.config_info.oracle_tbl_dest_dir
         if unittest:
             # Let unittests redefine table_export_dir and do their thing:
             return
