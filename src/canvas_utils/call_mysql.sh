@@ -62,7 +62,7 @@ then
     exit $?
 else
     ${MYSQL_PATH} --defaults-extra-file=<(printf "[client]\nhost = %s\nuser = %s\npassword = %s" "$HOST" "$USER" "$PWD")\
-                  $SRC_DB --batch -e " ${SELECT_STATEMENT}" > $OUTFILE
+                  $SRC_DB --batch -e " ${SELECT_STATEMENT}" >> $OUTFILE
                   # $SRC_DB --batch -e " ${SELECT_STATEMENT}" > $OUTFILE | sed  "s/\\\t/        /g" | sed "s/\\\n/ /g"
     exit $?
 fi
