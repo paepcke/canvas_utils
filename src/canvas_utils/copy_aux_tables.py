@@ -1481,7 +1481,7 @@ if __name__ == '__main__':
                         
     parser.add_argument('-d', '--destdir',
                         help='directory where tables will be deposited locally',
-                        default=f'/tmp')
+                        default=None)
                         
     parser.add_argument('-f', '--format',
                         choices=['csv'],
