@@ -336,7 +336,7 @@ class AuxTableCopier(object):
         for table_schema in table_schemas:
             table_name = table_schema.table_name
             
-            self.log_info(f"Copying {table_name} to {self.dest_dir}/{table_name}.csv...")
+            self.log_info(f"Copying {table_name} to {self.dest_dir}/{table_name}.tsv...")
             try:
                 self.copy_one_table_to_csv(table_schema)
             except DatabaseError as e:
@@ -966,7 +966,7 @@ class AuxTableCopier(object):
     def file_nm_from_tble(self, tbl_nm):
         return os.path.join(self.dest_dir, tbl_nm) + '.sql' \
             if self.copy_format == 'sql' \
-            else os.path.join(self.dest_dir, tbl_nm) + '.csv'
+            else os.path.join(self.dest_dir, tbl_nm) + '.tsv'
 
    
 # -------------------------- Class CopyResult ---------------
