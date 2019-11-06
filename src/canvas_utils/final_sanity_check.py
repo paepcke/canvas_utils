@@ -62,9 +62,8 @@ class SanityChecker(object):
         
         # Path to json of 'reasonable' table file lengths
         # to expect when tables are exported:
-        self.resonable_file_sizes_path = os.path.join(self.curr_dir, 'Data', 'typical_table_tsv_file_sizes.json')
+        self.reasonable_file_sizes_path = os.path.join(self.curr_dir, 'Data', 'typical_table_tsv_file_sizes.json')
         
-        HOME = os.getenv('HOME')
         self.table_export_dir_path = self.config_info.oracle_tbl_dest_dir
         if unittest:
             # Let unittests redefine table_export_dir and do their thing:
@@ -263,7 +262,7 @@ class SanityChecker(object):
         @param file_size_dict: mapping of table names to expected tsv file size
         @type file_size_dict: {src : int}
         '''
-        with open(self.resonable_file_sizes_path, 'w') as fd:
+        with open(self.reasonable_file_sizes_path, 'w') as fd:
             json.dump(file_size_dict, fd)
         
     #-------------------------
@@ -294,9 +293,9 @@ class SanityChecker(object):
         self.copied_tables_set   = set(self.copied_tables)
         
         # Initialize the 'reasonable' file lengths for each
-        # table from the pickled dict:
+        # table from the json file:
         
-        with open(self.resonable_file_sizes_path, 'r') as fd:
+        with open(self.reasonable_file_sizes_path, 'r') as fd:
             self.putative_file_sizes_dict = json.load(fd)
 
     #-------------------------
