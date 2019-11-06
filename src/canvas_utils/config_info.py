@@ -82,6 +82,10 @@ class ConfigInfo(object):
     @property
     def admin_email_recipient(self):
         return self._admin_email_recipient
+    
+    @property
+    def oracle_tbl_dest_dir(self):
+        return self._oracle_tbl_dest_dir
 
     #-------------------------
     # read_config_file 
@@ -143,6 +147,12 @@ class ConfigInfo(object):
         except KeyError:
             raise ConfigurationError(f"Cannot read DATABASE:canvas_pwd_file from {setup_file_name}")
 
+        try:
+            self._oracle_tbl_dest_dir = config_parser['DATABASE']['oracle_tbl_dest_dir']
+        except KeyError:
+            # For this we have a default:
+            self._oracle_tbl_dest_dir = '/tmp'
+            
         try:
             self._admin_email_recipient = config_parser['EMAIL']['admin_email_recipient']
         except KeyError:
