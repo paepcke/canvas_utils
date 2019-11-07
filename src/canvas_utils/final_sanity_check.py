@@ -194,6 +194,7 @@ class SanityChecker(object):
             in the exception's table_list property.
         '''
         shrunken_tables  = []
+
         for table_name in self.all_tables:
             file_path  = os.path.join(self.table_export_dir_path, table_name + '.tsv')
             try:
@@ -210,16 +211,16 @@ class SanityChecker(object):
                 self.putative_file_sizes_dict[table_name] = file_len
                 self.update_reasonable_file_sizes(self.putative_file_sizes_dict)
                 expected_minimal_file_len = file_len
-                 
+
             if (file_len < expected_minimal_file_len) or (file_len == 0):
                 shrunken_tables.append(table_name)
-                
+
             # If new file is larger than excpected, update the 
             # expected file size in the json file:
             if file_len > expected_minimal_file_len:
                 self.putative_file_sizes_dict[table_name] = file_len
                 self.update_reasonable_file_sizes(self.putative_file_sizes_dict)
-                
+
         if len(shrunken_tables) > 0:
             raise TableExportError("Table(s) exports abnormally small", shrunken_tables)
 
