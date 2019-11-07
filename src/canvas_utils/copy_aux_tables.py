@@ -7,7 +7,6 @@ Created on May 1, 2019
 from _collections import OrderedDict
 import argparse
 import collections.abc
-import csv
 import datetime
 import logging
 import os
@@ -16,27 +15,25 @@ from subprocess import PIPE
 import subprocess
 from pathlib import Path
 
-
 from canvas_utils_exceptions import DatabaseError
 from config_info import ConfigInfo
 from query_sorter import TableError
 from utilities import Utilities
 
-
 class AuxTableCopier(object):
     '''
-    Exports aux tables as .csv from aux database into a
+    Exports aux tables as .tsv from aux database into a
     given directory.
     '''
     
     file_ext = None
     
     # Compute year from which onward GradingProcess 
-    # records are to be exported to .csv. We use
+    # records are to be exported to .tsv. We use
     # <current_year> - 4. Just change the 4 to taste.
     # But the smaller the start year, the longer the
     # export will take:    
-    #*****GRADING_PROCESS_START_YEAR = datetime.datetime.now().year - 1
+    
     GRADING_PROCESS_START_YEAR = datetime.datetime.now().year - 1
     
     # Number of rows to pull in each batch
@@ -68,7 +65,7 @@ class AuxTableCopier(object):
         @type db_pwd:{str | None | bool}
         @param host: host of the source db. Default: default_host in setup.cfg
         @type host: str
-        @param dest_dir: directory where to place the .sql/.csv files. Default /tmp 
+        @param dest_dir: directory where to place the .sql/.tsv files. Default /tmp 
         @type dest_dir: str
         @param overwrite_existing: whether or not to delete files in the target
               dir. If false, must manually delete first.
@@ -402,7 +399,6 @@ class AuxTableCopier(object):
                   
         table_name    = table_schema.table_name
         out_file_name = os.path.join(self.dest_dir, table_name) + '.tsv'
-        #****** tmp_file_name = os.path.join('/tmp', table_name) + '.tsv'
         
         # Array of col names for the header line.
         # The csv writer will add quotes around the col names:
@@ -425,11 +421,16 @@ class AuxTableCopier(object):
         
         if os.path.exists(out_file_name):
             os.remove(out_file_name)
+
+        # Write the column names at the top:            
+        field_list_str = '\t'.join(field_list)
+        with open(out_file_name, 'w') as out_fd:
+            out_fd.write(field_list_str)
         
         mysql_cmd = f'''SELECT {', '.join(field_list)}
                           FROM {table_name};
                      '''
-            
+           
         retrieve_parms = OrderedDict({
             'shell_script' : shell_script,
             'host'         : self.host,
@@ -452,7 +453,7 @@ class AuxTableCopier(object):
         if table_name == 'AssignmentSubmissions': 
             # Get account numbers, and pull just rows of
             # one account number at a time. Accumulate into the temp file,
-            # then transfer to the final .csv:
+            # then transfer to the final .tsv:
             self.pull_by_account_id(retrieve_parms, table_name, field_list, out_file_name)
         elif table_name == 'GradingProcess':
             # Pull only the records since AuxTableCopier.GRADING_PROCESS_START_YEAR
@@ -476,17 +477,6 @@ class AuxTableCopier(object):
         if tsv_path.stat().st_size == 0:
             raise DatabaseError(f"Destination file {tsv_path} is empty; table {table_name} retrieval failed.")
         
-        # No longer needed: Informatica can handle output of MySQL
-        
-#         # Copy finished .tsv to final .csv:
-#         tsv_file_name = retrieve_parms['tmp_file_name']
-#         tsv_path = Path(tsv_file_name)
-#         if tsv_path.stat().st_size == 0:
-#             raise DatabaseError(f"File {tsv_path} is empty; won't overwrite {out_file_name}")
-#         
-#         # Got a good tsv file:
-#         self.cp_tsv_to_tsv(tsv_file_name, out_file_name, append=False)
-
     #-------------------------
     # pull_by_seq_num
     #--------------
@@ -532,7 +522,6 @@ class AuxTableCopier(object):
             if _completed_process.returncode != 0:
                 raise DatabaseError(f"Call to MySQL '{mysql_cmd[:20]}...' failed")
             
-            # self.cp_tsv_to_tsv(retrieve_parms['out_file_name'], out_file_name, append=appending)
             self.log_info(f"Pulled batch of (up to) {batch_size} rows from table {table_name}")
 
     #-------------------------
@@ -595,7 +584,7 @@ class AuxTableCopier(object):
         For the very large AssignmentSubmissions table we
         need to pull rows in batches if mysql server is left
         at default config values. Find those chunks, pull them
-        into a temp .tsv file, and transfer them to the final .csv file
+        into a temp .tsv file, and transfer them to the final .tsv file
         piece by piece. 
         
         @param retrieve_parms: ordered dict of parameters to pass to the 
@@ -675,22 +664,13 @@ class AuxTableCopier(object):
                                               #   add to the WHERE account id in <range>... 
             })
         @type retrieve_parms: OrderedDict
-        @param out_file_name: path to the final .csv file
+        @param out_file_name: path to the final .tsv file
         @type out_file_name: str
         @param account_id_seq_objs: list of 
         @type account_id_seq_objs: [AccountCollection]
         @param col_names: comma-separated list of column names to include in output
         @type col_names: str
         '''
-
-#*********        
-#         if self.utils.file_length(out_file_name) == 0:
-#             # If this is the first batch, we include
-#             # the column header:
-#             appending = False
-#         else:
-#             appending = True
-#*********
         
         # For each seq of account_id, pull the corresponding
         # rows, and put them into a .tsv tmp file. So, for
@@ -722,92 +702,7 @@ class AuxTableCopier(object):
             if _completed_process.returncode != 0:
                 raise DatabaseError(f"Call to MySQL '{mysql_cmd[:20]}...' failed")
             
-            #****self.cp_tsv_to_tsv(retrieve_parms['tmp_file_name'], out_file_name, append=appending)
-            #****appending = True
             self.log_info(f"Pulled {account_id_seq_obj.num_rows} rows from table {table_name}")
-    
-
-    #-------------------------
-    # cp_tsv_to_tsv 
-    #--------------
-
-    def cp_tsv_to_tsv(self, src_file_name, dst_file_name, append=False):
-        '''
-        Copies a tsv file from src to dest. Along the way,
-        replaces all tab chars that are embedded in columns
-        with 8 spaces.
-        
-        @param src_file_name: full path to source file
-        @type src_file_name: str
-        @param dst_file_name: full path to destination file
-        @type dst_file_name: str
-        @param append: whether or not to append to destination
-        @type append: bool
-        '''
-        self.log_info(f"Copying tsv file {src_file_name} to csv {dst_file_name}...")
-        with open(dst_file_name, 'a') as out_fd:
-            with open(src_file_name, 'r', encoding='ISO-8859-1') as in_fd:
-                if append:
-                    # Throw away the column header:
-                    try:
-                        next(in_fd)
-                    except StopIteration:
-                        # File is empty:
-                        self.log_info(f"Empty .tsv file: {src_file_name}; doing nothing.")
-                        return
-                for line in in_fd:
-                    # Replace any backslashed tab by eight spaces:
-                    safe_line = line.replace("\\\t", "        ")
-                    # Replace \n and \r in the text with spaces:
-                    safe_line = safe_line.replace("\\n"," ")
-                    safe_line = safe_line.replace("\\r"," ")
-                    out_fd.write(safe_line)
-        
-    #-------------------------
-    # cp_tsv_to_csv 
-    #--------------
-    
-    def cp_tsv_to_csv(self, src_file_name, dst_file_name, append=False):
-        '''
-        Copy file from source to destination. The source file
-        is expected to have a header line with the column names. 
-        If append is False, then the destination file is wiped 
-        before copy, and the header line is copied over.
-        
-        If append is False, the header line is not copied, and 
-        the file is appended. 
-        
-        @param src_file_name: full path to source file
-        @type src_file_name: str
-        @param dst_file_name: full path to destination file
-        @type dst_file_name: str
-        @param append: whether or not to append to destination
-        @type append: bool
-        '''
-        self.log_info(f"Copying tsv file {src_file_name} to csv {dst_file_name}...")
-        with open(dst_file_name, 'w') as out_fd:
-            with open(src_file_name, 'r', encoding='ISO-8859-1') as in_fd:
-                csv_writer = csv.writer(out_fd,
-                                        delimiter=',',
-                                        quoting=csv.QUOTE_ALL,
-                                        escapechar='\\',
-                                        doublequote=False,  # Use escape char for '"'
-                                        quotechar='"',
-                                        )
-                
-                if append:
-                    # Throw away the column header:
-                    try:
-                        next(in_fd)
-                    except StopIteration:
-                        # File is empty:
-                        self.log_info(f"Empty .tsv file: {src_file_name}; doing nothing.")
-                        return
-                for line in in_fd:
-                    split_line = line.strip().split('\t')
-                    # Write to dest as csv:
-                    csv_writer.writerow(split_line)
-        self.log_info(f"Done copying tsv file {src_file_name} to csv {dst_file_name}.")
                 
     #-------------------------
     # populate_table_schema 
@@ -903,7 +798,7 @@ class AuxTableCopier(object):
     def tables_to_copy(self, table_list_set=None):
         '''
         Given a set of table names, check which of those correspond
-        to files in the copy target directory. Either as .csv or .sql.
+        to files in the copy target directory. Either as .tsv or .sql.
         Return a subset of the provided table_list_set, with tables
         that do not have an associated file.
         
