@@ -425,7 +425,7 @@ class AuxTableCopier(object):
         # Write the column names at the top:            
         field_list_str = '\t'.join(field_list)
         with open(out_file_name, 'w') as out_fd:
-            out_fd.write(field_list_str)
+            out_fd.write(f"{field_list_str}\n")
         
         mysql_cmd = f'''SELECT {', '.join(field_list)}
                           FROM {table_name};
